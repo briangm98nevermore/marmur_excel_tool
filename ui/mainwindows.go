@@ -303,6 +303,7 @@ func (ui *mainUI) onCancelEdit() {
 	ui.amountEntry.SetText("")
 }
 
+// Genera el reporte Excel
 func (ui *mainUI) onGenerateReport() {
 	if len(ui.entries) == 0 {
 		dialog.ShowInformation("Sin datos", "No hay entradas para generar el reporte.", ui.win)
@@ -311,8 +312,8 @@ func (ui *mainUI) onGenerateReport() {
 	month := ui.monthSelect.Selected
 	year := ui.yearSelect.Selected
 	currency := ui.currencySelect.Selected
-
-	dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+	
+	dialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 		if err != nil || writer == nil {
 			return
 		}
@@ -324,8 +325,13 @@ func (ui *mainUI) onGenerateReport() {
 			dialog.ShowInformation("Éxito", "Reporte generado correctamente.", ui.win)
 		}
 	}, ui.win)
+	
+	fileName := fmt.Sprintf("reporte_%s_%s_%s.xlsx", month, year, currency)
+	dialog.SetFileName(fileName)
+	dialog.Show()
 }
 
+// Abre un Excel existente para cargar entradas
 func (ui *mainUI) onOpenExcel() {
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 		if err != nil || reader == nil {
@@ -343,8 +349,9 @@ func (ui *mainUI) onOpenExcel() {
 	}, ui.win)
 }
 
+// Guarda las entradas actuales en un Excel (para continuar después)
 func (ui *mainUI) onSave() {
-	dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
+	dialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 		if err != nil || writer == nil {
 			return
 		}
@@ -352,8 +359,13 @@ func (ui *mainUI) onSave() {
 		err = excel.SaveEntries(ui.entries, writer)
 		if err != nil {
 			dialog.ShowError(err, ui.win)
+		} else {
+			dialog.ShowInformation("Guardado", "Datos guardados correctamente.", ui.win)
 		}
 	}, ui.win)
+	
+	dialog.SetFileName("marmur_datos.xlsx")
+	dialog.Show()
 }
 
 func indexOfMonth(month string) int {
