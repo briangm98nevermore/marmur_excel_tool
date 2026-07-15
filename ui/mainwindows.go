@@ -9,27 +9,30 @@ import (
 	"marmur_excel_tool/model"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"fyne.io/fyne/v2/canvas"
 )
 
 type mainUI struct {
-	win              fyne.Window
-	entries          []model.Entry
-	monthSelect      *widget.Select
-	yearSelect       *widget.Select
-	currencySelect   *widget.Select
-	table            *widget.Table
-	typeRadio        *widget.RadioGroup
-	categorySelect   *widget.Select
-	invoiceEntry     *widget.Entry
-	descEntry        *widget.Entry
-	amountEntry      *widget.Entry
-	incomeCategories []string
+	win               fyne.Window
+	entries           []model.Entry
+	monthSelect       *widget.Select
+	yearSelect        *widget.Select
+	currencySelect    *widget.Select
+	table             *widget.Table
+	typeRadio         *widget.RadioGroup
+	categorySelect    *widget.Select
+	invoiceEntry      *widget.Entry
+	descEntry         *widget.Entry
+	amountEntry       *widget.Entry
+	incomeCategories  []string
 	expenseCategories []string
+	editingIndex      int
+	addButton         *widget.Button
+	cancelButton      *widget.Button
 }
 
 func BuildUI(w fyne.Window) {
@@ -37,6 +40,7 @@ func BuildUI(w fyne.Window) {
 		win:              w,
 		incomeCategories: append([]string{}, model.DefaultIncomeCategories...),
 		expenseCategories: append([]string{}, model.DefaultExpenseCategories...),
+		editingIndex:     -1,
 	}
 
 	// --- Selectores superiores ---
@@ -68,75 +72,95 @@ func BuildUI(w fyne.Window) {
 		btnSave,
 	)
 
-	// --- Tabla ---
+	// --- Tabla con edición/eliminación y colores alternados ---
 	ui.table = widget.NewTable(
-		func() (int, int) { return len(ui.entries) + 1, 6 },
+		func() (int, int) { return len(ui.entries) + 1, 8 },
 		func() fyne.CanvasObject {
-			// Celda con fondo y texto
 			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-			label := widget.NewLabel("")
-			return container.NewStack(bg, label)
+			content := container.NewHBox()
+			return container.NewStack(bg, content)
 		},
 		func(id widget.TableCellID, obj fyne.CanvasObject) {
-			// obj es un *fyne.Container (Stack)
 			stack := obj.(*fyne.Container)
 			bg := stack.Objects[0].(*canvas.Rectangle)
-			label := stack.Objects[1].(*widget.Label)
+			// Limpiar contenido anterior
+			if len(stack.Objects) > 1 {
+				stack.Remove(stack.Objects[1])
+			}
+			var content fyne.CanvasObject
 
 			if id.Row == 0 {
-				// Cabecera
-				headers := []string{"Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto"}
-				label.SetText(headers[id.Col])
+				headers := []string{"Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
+				label := widget.NewLabel(headers[id.Col])
 				label.TextStyle = fyne.TextStyle{Bold: true}
+				content = label
 				bg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
 				bg.Refresh()
-				return
-			}
-
-			entry := ui.entries[id.Row-1]
-			switch id.Col {
-			case 0:
-				label.SetText(entry.Date.Format("02/01/2006"))
-			case 1:
-				label.SetText(entry.Type)
-			case 2:
-				label.SetText(entry.Category)
-			case 3:
-				label.SetText(entry.InvoiceNum)
-			case 4:
-				label.SetText(entry.Description)
-			case 5:
-				label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
-			}
-
-			// Color alternado (filas pares e impares)
-			if id.Row%2 == 0 {
-				bg.FillColor = theme.Color(theme.ColorNameHover)
 			} else {
-				bg.FillColor = theme.Color(theme.ColorNameBackground)
+				entry := ui.entries[id.Row-1]
+				if id.Col < 6 {
+					label := widget.NewLabel("")
+					switch id.Col {
+					case 0:
+						label.SetText(entry.Date.Format("02/01/2006"))
+					case 1:
+						label.SetText(entry.Type)
+					case 2:
+						label.SetText(entry.Category)
+					case 3:
+						label.SetText(entry.InvoiceNum)
+					case 4:
+						label.SetText(entry.Description)
+					case 5:
+						label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
+					}
+					content = label
+				} else if id.Col == 6 {
+					btn := widget.NewButton("Editar", func() {
+						ui.startEdit(id.Row - 1)
+					})
+					content = btn
+				} else if id.Col == 7 {
+					btn := widget.NewButton("Eliminar", func() {
+						ui.deleteEntry(id.Row - 1)
+					})
+					content = btn
+				}
+				// Color alternado de filas
+				if id.Row%2 == 0 {
+					bg.FillColor = theme.Color(theme.ColorNameHover)
+				} else {
+					bg.FillColor = theme.Color(theme.ColorNameBackground)
+				}
+				bg.Refresh()
 			}
-			bg.Refresh()
+			stack.Add(content)
 		},
 	)
 	ui.table.SetColumnWidth(0, 100)
 	ui.table.SetColumnWidth(1, 80)
 	ui.table.SetColumnWidth(2, 120)
-	ui.table.SetColumnWidth(3, 80)
+	ui.table.SetColumnWidth(3, 100)
 	ui.table.SetColumnWidth(4, 200)
+	ui.table.SetColumnWidth(5, 100)
+	ui.table.SetColumnWidth(6, 80)
+	ui.table.SetColumnWidth(7, 80)
 
-	// --- Formulario nueva entrada (orden corregido) ---
-	// 1. Primero creamos el selector de categoría
+	// --- Formulario (usa widget.NewForm para campos más grandes) ---
 	ui.categorySelect = widget.NewSelect([]string{}, nil)
 
-	// 2. Luego el RadioGroup, cuyo callback ya puede usar categorySelect sin nil pointer
 	ui.typeRadio = widget.NewRadioGroup([]string{"Entrada", "Gasto"}, func(selected string) {
 		ui.updateCategorySelect()
+		// Seleccionar automáticamente primera categoría al cambiar tipo
+		if selected == "Entrada" && len(ui.incomeCategories) > 0 {
+			ui.categorySelect.SetSelected(ui.incomeCategories[0])
+		} else if selected == "Gasto" && len(ui.expenseCategories) > 0 {
+			ui.categorySelect.SetSelected(ui.expenseCategories[0])
+		}
 	})
 	ui.typeRadio.Required = true
-	// 3. Ahora es seguro seleccionar "Entrada"
 	ui.typeRadio.SetSelected("Entrada")
 
-	// Resto de campos
 	ui.invoiceEntry = widget.NewEntry()
 	ui.invoiceEntry.SetPlaceHolder("# Factura")
 	ui.descEntry = widget.NewEntry()
@@ -144,16 +168,23 @@ func BuildUI(w fyne.Window) {
 	ui.amountEntry = widget.NewEntry()
 	ui.amountEntry.SetPlaceHolder("Monto (ej. 150.00)")
 
-	btnAdd := widget.NewButton("Añadir", ui.onAddEntry)
+	form := widget.NewForm(
+		widget.NewFormItem("Tipo", ui.typeRadio),
+		widget.NewFormItem("Categoría", ui.categorySelect),
+		widget.NewFormItem("# Factura", ui.invoiceEntry),
+		widget.NewFormItem("Descripción", ui.descEntry),
+		widget.NewFormItem("Monto", ui.amountEntry),
+	)
+
+	ui.addButton = widget.NewButton("Añadir", ui.onAddOrUpdateEntry)
+	ui.cancelButton = widget.NewButton("Cancelar", ui.onCancelEdit)
+	ui.cancelButton.Hide()
+	btnBox := container.NewHBox(ui.addButton, ui.cancelButton)
 
 	formBox := container.NewVBox(
 		widget.NewLabel("Nueva entrada:"),
-		container.NewHBox(widget.NewLabel("Tipo:"), ui.typeRadio),
-		container.NewHBox(widget.NewLabel("Categoría:"), ui.categorySelect),
-		container.NewHBox(widget.NewLabel("# Factura:"), ui.invoiceEntry),
-		container.NewHBox(widget.NewLabel("Descripción:"), ui.descEntry),
-		container.NewHBox(widget.NewLabel("Monto:"), ui.amountEntry),
-		btnAdd,
+		form,
+		btnBox,
 	)
 
 	// Layout final
@@ -166,7 +197,7 @@ func BuildUI(w fyne.Window) {
 	w.SetContent(content)
 }
 
-// Cambia las categorías según el tipo seleccionado
+// Actualiza las opciones del selector de categoría según el tipo elegido
 func (ui *mainUI) updateCategorySelect() {
 	if ui.typeRadio.Selected == "Entrada" {
 		ui.categorySelect.Options = ui.incomeCategories
@@ -176,15 +207,13 @@ func (ui *mainUI) updateCategorySelect() {
 	ui.categorySelect.Refresh()
 }
 
-// Añade una nueva fila
-func (ui *mainUI) onAddEntry() {
-	// Validar monto
+// Añade o actualiza una entrada
+func (ui *mainUI) onAddOrUpdateEntry() {
 	amount, err := strconv.ParseFloat(ui.amountEntry.Text, 64)
 	if err != nil || amount <= 0 {
 		dialog.ShowError(fmt.Errorf("Monto inválido"), ui.win)
 		return
 	}
-	// Fecha automática con el mes/año seleccionados
 	year, _ := strconv.Atoi(ui.yearSelect.Selected)
 	month := indexOfMonth(ui.monthSelect.Selected) + 1
 	date := time.Date(year, time.Month(month), time.Now().Day(), 0, 0, 0, 0, time.Local)
@@ -198,25 +227,75 @@ func (ui *mainUI) onAddEntry() {
 		Amount:      amount,
 		Currency:    ui.currencySelect.Selected,
 	}
-	// Si la categoría no existe en la lista, la agregamos
-	if ui.typeRadio.Selected == "Entrada" {
-		if !contains(ui.incomeCategories, entry.Category) && entry.Category != "" {
-			ui.incomeCategories = append(ui.incomeCategories, entry.Category)
-		}
+
+	if ui.editingIndex >= 0 {
+		// Actualizar entrada existente
+		ui.entries[ui.editingIndex] = entry
+		ui.editingIndex = -1
+		ui.addButton.SetText("Añadir")
+		ui.cancelButton.Hide()
 	} else {
-		if !contains(ui.expenseCategories, entry.Category) && entry.Category != "" {
-			ui.expenseCategories = append(ui.expenseCategories, entry.Category)
+		// Nueva entrada: agregar categoría si no existe
+		if entry.Type == "Entrada" {
+			if !contains(ui.incomeCategories, entry.Category) && entry.Category != "" {
+				ui.incomeCategories = append(ui.incomeCategories, entry.Category)
+			}
+		} else {
+			if !contains(ui.expenseCategories, entry.Category) && entry.Category != "" {
+				ui.expenseCategories = append(ui.expenseCategories, entry.Category)
+			}
 		}
+		ui.entries = append(ui.entries, entry)
 	}
-	ui.entries = append(ui.entries, entry)
+
+	// Limpiar formulario
+	ui.invoiceEntry.SetText("")
+	ui.descEntry.SetText("")
+	ui.amountEntry.SetText("")
 	ui.table.Refresh()
-	// Limpiar campos
+}
+
+// Carga los datos de una entrada en el formulario para editar
+func (ui *mainUI) startEdit(index int) {
+	if index < 0 || index >= len(ui.entries) {
+		return
+	}
+	entry := ui.entries[index]
+	ui.typeRadio.SetSelected(entry.Type)
+	ui.updateCategorySelect()
+	ui.categorySelect.SetSelected(entry.Category)
+	ui.invoiceEntry.SetText(entry.InvoiceNum)
+	ui.descEntry.SetText(entry.Description)
+	ui.amountEntry.SetText(fmt.Sprintf("%.2f", entry.Amount))
+	ui.editingIndex = index
+	ui.addButton.SetText("Actualizar")
+	ui.cancelButton.Show()
+}
+
+// Elimina una entrada con confirmación
+func (ui *mainUI) deleteEntry(index int) {
+	if index < 0 || index >= len(ui.entries) {
+		return
+	}
+	dialog.ShowConfirm("Eliminar", "¿Eliminar esta entrada?", func(ok bool) {
+		if ok {
+			ui.entries = append(ui.entries[:index], ui.entries[index+1:]...)
+			ui.table.Refresh()
+		}
+	}, ui.win)
+}
+
+// Cancela la edición actual
+func (ui *mainUI) onCancelEdit() {
+	ui.editingIndex = -1
+	ui.addButton.SetText("Añadir")
+	ui.cancelButton.Hide()
 	ui.invoiceEntry.SetText("")
 	ui.descEntry.SetText("")
 	ui.amountEntry.SetText("")
 }
 
-// Generar reporte (llama a la lógica en excel/report.go)
+// Genera el reporte Excel
 func (ui *mainUI) onGenerateReport() {
 	if len(ui.entries) == 0 {
 		dialog.ShowInformation("Sin datos", "No hay entradas para generar el reporte.", ui.win)
@@ -231,7 +310,6 @@ func (ui *mainUI) onGenerateReport() {
 			return
 		}
 		defer writer.Close()
-		// Llamada a la generación del reporte
 		err = excel.GenerateReport(ui.entries, month, year, currency, writer)
 		if err != nil {
 			dialog.ShowError(err, ui.win)
@@ -241,7 +319,7 @@ func (ui *mainUI) onGenerateReport() {
 	}, ui.win)
 }
 
-// Abre un Excel anterior y carga los datos
+// Abre un Excel existente para cargar entradas
 func (ui *mainUI) onOpenExcel() {
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 		if err != nil || reader == nil {
@@ -256,11 +334,10 @@ func (ui *mainUI) onOpenExcel() {
 		}
 		ui.entries = entries
 		ui.table.Refresh()
-		// Si el Excel tiene moneda/mes, podrías actualizar los selectores
 	}, ui.win)
 }
 
-// Guarda los datos actuales en un Excel intermedio
+// Guarda las entradas actuales en un Excel (para continuar después)
 func (ui *mainUI) onSave() {
 	dialog.ShowFileSave(func(writer fyne.URIWriteCloser, err error) {
 		if err != nil || writer == nil {
@@ -274,7 +351,7 @@ func (ui *mainUI) onSave() {
 	}, ui.win)
 }
 
-// Utilidades
+// Funciones auxiliares
 func indexOfMonth(month string) int {
 	months := []string{"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
 		"Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"}
