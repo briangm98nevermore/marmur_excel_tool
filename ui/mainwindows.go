@@ -333,20 +333,39 @@ func (ui *mainUI) onGenerateReport() {
 
 // Abre un Excel existente para cargar entradas
 func (ui *mainUI) onOpenExcel() {
+	fmt.Println("DEBUG: Abriendo diálogo de archivo...")
+	
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
-		if err != nil || reader == nil {
-			return
-		}
-		defer reader.Close()
-		path := reader.URI().Path()
-		entries, err := excel.ImportEntries(path)
+		fmt.Printf("DEBUG: Callback ejecutado. err=%v, reader=%v\n", err, reader)
+		
 		if err != nil {
+			fmt.Printf("DEBUG: Error: %v\n", err)
 			dialog.ShowError(err, ui.win)
 			return
 		}
+		if reader == nil {
+			fmt.Println("DEBUG: Usuario canceló")
+			return
+		}
+		defer reader.Close()
+		
+		path := reader.URI().Path()
+		fmt.Printf("DEBUG: Archivo seleccionado: %s\n", path)
+		
+		entries, err := excel.ImportEntries(path)
+		if err != nil {
+			fmt.Printf("DEBUG: Error importando: %v\n", err)
+			dialog.ShowError(fmt.Errorf("Error al leer el archivo: %v", err), ui.win)
+			return
+		}
+		
+		fmt.Printf("DEBUG: Entradas cargadas: %d\n", len(entries))
 		ui.entries = entries
 		ui.table.Refresh()
+		dialog.ShowInformation("Cargado", fmt.Sprintf("Se cargaron %d entradas correctamente.", len(entries)), ui.win)
 	}, ui.win)
+	
+	fmt.Println("DEBUG: Diálogo mostrado")
 }
 
 // Guarda las entradas actuales en un Excel (para continuar después)
