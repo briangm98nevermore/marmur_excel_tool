@@ -13,6 +13,6 @@ func main() {
 
 	ui.BuildUI(w)
 
-	w.Resize(fyne.NewSize(900, 600))
+	w.Resize(fyne.NewSize(1200, 700))
 	w.ShowAndRun()
 }

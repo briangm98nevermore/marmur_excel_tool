@@ -152,15 +152,15 @@ func BuildUI(w fyne.Window) {
 	)
 
 	// Anchos de columna ajustados
-	ui.table.SetColumnWidth(0, 40)  // Nº
-	ui.table.SetColumnWidth(1, 100) // Fecha
-	ui.table.SetColumnWidth(2, 80)  // Tipo
-	ui.table.SetColumnWidth(3, 120) // Categoría
-	ui.table.SetColumnWidth(4, 100) // # Factura
-	ui.table.SetColumnWidth(5, 180) // Descripción (más ancha)
-	ui.table.SetColumnWidth(6, 100) // Monto
-	ui.table.SetColumnWidth(7, 80)  // Editar
-	ui.table.SetColumnWidth(8, 80)  // Eliminar
+	ui.table.SetColumnWidth(0, 60)  // Nº
+	ui.table.SetColumnWidth(1, 120) // Fecha
+	ui.table.SetColumnWidth(2, 100)  // Tipo
+	ui.table.SetColumnWidth(3, 140) // Categoría
+	ui.table.SetColumnWidth(4, 120) // # Factura
+	ui.table.SetColumnWidth(5, 400) // Descripción (más ancha)
+	ui.table.SetColumnWidth(6, 200) // Monto
+	ui.table.SetColumnWidth(7, 100)  // Editar
+	ui.table.SetColumnWidth(8, 100)  // Eliminar
 
 	// --- Formulario ---
 	ui.categorySelect = widget.NewSelect([]string{}, nil)
