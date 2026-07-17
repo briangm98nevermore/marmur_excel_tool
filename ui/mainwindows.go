@@ -28,7 +28,7 @@ type mainUI struct {
 	invoiceEntry      *widget.Entry
 	descEntry         *widget.Entry
 	amountEntry       *widget.Entry
-	dayEntry          *widget.Entry // Nuevo campo para el día
+	dayEntry          *widget.Entry
 	incomeCategories  []string
 	expenseCategories []string
 	editingIndex      int
@@ -63,7 +63,6 @@ func BuildUI(w fyne.Window) {
 
 	btnOpen := widget.NewButton("Abrir Excel", ui.onOpenExcel)
 
-	// Barra superior sin el botón Guardar
 	topBar := container.NewHBox(
 		widget.NewLabel("Mes:"), ui.monthSelect,
 		widget.NewLabel("Año:"), ui.yearSelect,
@@ -72,92 +71,96 @@ func BuildUI(w fyne.Window) {
 		btnOpen,
 	)
 
-	// --- Tabla (9 columnas: Nº, Fecha, Tipo, Categoría, #Factura, Desc, Monto, Editar, Eliminar) ---
+	// --- Tabla con botones reales para editar/eliminar y texto truncado ---
 	ui.table = widget.NewTable(
 		func() (int, int) { return len(ui.entries) + 1, 9 },
 		func() fyne.CanvasObject {
 			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+			// Label base con truncamiento habilitado
 			label := widget.NewLabel("")
-			label.Wrapping = fyne.TextTruncate
+			label.Truncation = fyne.TextTruncateEllipsis
 			return container.NewStack(bg, label)
 		},
 		func(id widget.TableCellID, obj fyne.CanvasObject) {
 			stack := obj.(*fyne.Container)
 			bg := stack.Objects[0].(*canvas.Rectangle)
-			label := stack.Objects[1].(*widget.Label)
 
-			// ¡Resetear el estilo a normal siempre!
-    		label.TextStyle = fyne.TextStyle{}
+			// Reemplazar contenido preservando el fondo
+			if len(stack.Objects) > 1 {
+				stack.Remove(stack.Objects[1])
+			}
+
+			var content fyne.CanvasObject
 
 			if id.Row == 0 {
+				// Cabecera
 				headers := []string{"Nº", "Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
-				label.SetText(headers[id.Col])
+				label := widget.NewLabel(headers[id.Col])
 				label.TextStyle = fyne.TextStyle{Bold: true}
+				label.Truncation = fyne.TextTruncateEllipsis
+				content = label
 				bg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
-				bg.Refresh()
-				return
-			}
-
-			entry := ui.entries[id.Row-1]
-
-			switch id.Col {
-			case 0:
-				label.SetText(strconv.Itoa(id.Row)) // Número de fila
-			case 1:
-				label.SetText(entry.Date.Format("02/01/2006"))
-			case 2:
-				label.SetText(entry.Type)
-			case 3:
-				label.SetText(entry.Category)
-			case 4:
-				label.SetText(entry.InvoiceNum)
-			case 5:
-				label.SetText(entry.Description)
-			case 6:
-				label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
-			case 7:
-				label.SetText("✏️ Editar")
-				label.TextStyle = fyne.TextStyle{Italic: true}
-			case 8:
-				label.SetText("🗑️ Eliminar")
-				label.TextStyle = fyne.TextStyle{Italic: true}
-			}
-
-			// Color alternado
-
-			if id.Row%2 == 0 {
-				bg.FillColor = theme.Color(theme.ColorNameHover)
 			} else {
-				bg.FillColor = theme.Color(theme.ColorNameBackground)
+				entry := ui.entries[id.Row-1]
+
+				if id.Col < 7 {
+					// Columnas de datos con truncamiento
+					label := widget.NewLabel("")
+					label.Truncation = fyne.TextTruncateEllipsis
+					switch id.Col {
+					case 0:
+						label.SetText(strconv.Itoa(id.Row))
+					case 1:
+						label.SetText(entry.Date.Format("02/01/2006"))
+					case 2:
+						label.SetText(entry.Type)
+					case 3:
+						label.SetText(entry.Category)
+					case 4:
+						label.SetText(entry.InvoiceNum)
+					case 5:
+						label.SetText(entry.Description)
+					case 6:
+						label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
+					}
+					content = label
+				} else if id.Col == 7 {
+					btn := widget.NewButton("Editar", func() {
+						ui.startEdit(id.Row - 1)
+					})
+					btn.Importance = widget.LowImportance
+					content = btn
+				} else if id.Col == 8 {
+					btn := widget.NewButton("Eliminar", func() {
+						ui.deleteEntry(id.Row - 1)
+					})
+					btn.Importance = widget.DangerImportance
+					content = btn
+				}
+
+				// Color de fondo alternado
+				if id.Row%2 == 0 {
+					bg.FillColor = theme.Color(theme.ColorNameHover)
+				} else {
+					bg.FillColor = theme.Color(theme.ColorNameBackground)
+				}
 			}
+
 			bg.Refresh()
+			stack.Add(content)
 		},
 	)
 
-	// Ajustar anchos para las 9 columnas
+	// Anchos de columna ajustados
 	ui.table.SetColumnWidth(0, 40)  // Nº
 	ui.table.SetColumnWidth(1, 100) // Fecha
 	ui.table.SetColumnWidth(2, 80)  // Tipo
 	ui.table.SetColumnWidth(3, 120) // Categoría
 	ui.table.SetColumnWidth(4, 100) // # Factura
-	ui.table.SetColumnWidth(5, 200) // Descripción
+	ui.table.SetColumnWidth(5, 180) // Descripción (más ancha)
 	ui.table.SetColumnWidth(6, 100) // Monto
 	ui.table.SetColumnWidth(7, 80)  // Editar
 	ui.table.SetColumnWidth(8, 80)  // Eliminar
-
-	// Clic en las celdas de editar/eliminar (columnas 7 y 8)
-	ui.table.OnSelected = func(id widget.TableCellID) {
-		if id.Row == 0 {
-			return
-		}
-		index := id.Row - 1
-		switch id.Col {
-		case 7:
-			ui.startEdit(index)
-		case 8:
-			ui.deleteEntry(index)
-		}
-	}
 
 	// --- Formulario ---
 	ui.categorySelect = widget.NewSelect([]string{}, nil)
@@ -173,18 +176,15 @@ func BuildUI(w fyne.Window) {
 	ui.typeRadio.Required = true
 	ui.typeRadio.SetSelected("Entrada")
 
-	// Entradas de texto
 	ui.invoiceEntry = widget.NewEntry()
 	ui.invoiceEntry.SetPlaceHolder("# Factura")
 	ui.descEntry = widget.NewEntry()
 	ui.descEntry.SetPlaceHolder("Descripción")
 	ui.amountEntry = widget.NewEntry()
 	ui.amountEntry.SetPlaceHolder("Monto (ej. 150.00)")
-
-	// Nuevo campo para el día
 	ui.dayEntry = widget.NewEntry()
 	ui.dayEntry.SetPlaceHolder("Día (1-31)")
-	ui.dayEntry.SetText("1") // Valor por defecto
+	ui.dayEntry.SetText("1")
 
 	form := widget.NewForm(
 		widget.NewFormItem("Tipo", ui.typeRadio),
@@ -230,8 +230,6 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 		dialog.ShowError(fmt.Errorf("Monto inválido"), ui.win)
 		return
 	}
-
-	// Leer día
 	day, err := strconv.Atoi(ui.dayEntry.Text)
 	if err != nil || day < 1 || day > 31 {
 		dialog.ShowError(fmt.Errorf("Día inválido (1-31)"), ui.win)
@@ -239,7 +237,6 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 	}
 	year, _ := strconv.Atoi(ui.yearSelect.Selected)
 	month := indexOfMonth(ui.monthSelect.Selected) + 1
-	// Construir fecha (si el día es mayor que los días del mes, time.Date lo ajusta automáticamente)
 	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
 
 	entry := model.Entry{
@@ -270,11 +267,10 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 		ui.entries = append(ui.entries, entry)
 	}
 
-	// Limpiar formulario
 	ui.invoiceEntry.SetText("")
 	ui.descEntry.SetText("")
 	ui.amountEntry.SetText("")
-	ui.dayEntry.SetText("1") // Reiniciar día
+	ui.dayEntry.SetText("1")
 	ui.table.Refresh()
 }
 
@@ -289,7 +285,7 @@ func (ui *mainUI) startEdit(index int) {
 	ui.invoiceEntry.SetText(entry.InvoiceNum)
 	ui.descEntry.SetText(entry.Description)
 	ui.amountEntry.SetText(fmt.Sprintf("%.2f", entry.Amount))
-	ui.dayEntry.SetText(strconv.Itoa(entry.Date.Day())) // Cargar día
+	ui.dayEntry.SetText(strconv.Itoa(entry.Date.Day()))
 	ui.editingIndex = index
 	ui.addButton.SetText("Actualizar")
 	ui.cancelButton.Show()
