@@ -28,6 +28,7 @@ type mainUI struct {
 	invoiceEntry      *widget.Entry
 	descEntry         *widget.Entry
 	amountEntry       *widget.Entry
+	dayEntry          *widget.Entry // Nuevo campo para el día
 	incomeCategories  []string
 	expenseCategories []string
 	editingIndex      int
@@ -61,29 +62,24 @@ func BuildUI(w fyne.Window) {
 	btnReport.Importance = widget.HighImportance
 
 	btnOpen := widget.NewButton("Abrir Excel", ui.onOpenExcel)
-	btnSave := widget.NewButton("Guardar", ui.onSave)
 
+	// Barra superior sin el botón Guardar
 	topBar := container.NewHBox(
 		widget.NewLabel("Mes:"), ui.monthSelect,
 		widget.NewLabel("Año:"), ui.yearSelect,
 		widget.NewLabel("Moneda:"), ui.currencySelect,
 		btnReport,
 		btnOpen,
-		btnSave,
 	)
 
-	// --- Tabla ---
+	// --- Tabla (9 columnas: Nº, Fecha, Tipo, Categoría, #Factura, Desc, Monto, Editar, Eliminar) ---
 	ui.table = widget.NewTable(
-		func() (int, int) { 
-			return len(ui.entries) + 1, 8 
-		},
+		func() (int, int) { return len(ui.entries) + 1, 9 },
 		func() fyne.CanvasObject {
-			// Cada celda tendrá un fondo y una etiqueta dentro de un Stack
 			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
 			label := widget.NewLabel("")
 			label.Wrapping = fyne.TextTruncate
-			stack := container.NewStack(bg, label)
-			return stack
+			return container.NewStack(bg, label)
 		},
 		func(id widget.TableCellID, obj fyne.CanvasObject) {
 			stack := obj.(*fyne.Container)
@@ -91,8 +87,7 @@ func BuildUI(w fyne.Window) {
 			label := stack.Objects[1].(*widget.Label)
 
 			if id.Row == 0 {
-				// Cabecera
-				headers := []string{"Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
+				headers := []string{"Nº", "Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
 				label.SetText(headers[id.Col])
 				label.TextStyle = fyne.TextStyle{Bold: true}
 				bg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
@@ -101,30 +96,30 @@ func BuildUI(w fyne.Window) {
 			}
 
 			entry := ui.entries[id.Row-1]
-			
-			// Datos de la fila
+
 			switch id.Col {
 			case 0:
-				label.SetText(entry.Date.Format("02/01/2006"))
+				label.SetText(strconv.Itoa(id.Row)) // Número de fila
 			case 1:
-				label.SetText(entry.Type)
+				label.SetText(entry.Date.Format("02/01/2006"))
 			case 2:
-				label.SetText(entry.Category)
+				label.SetText(entry.Type)
 			case 3:
-				label.SetText(entry.InvoiceNum)
+				label.SetText(entry.Category)
 			case 4:
-				label.SetText(entry.Description)
+				label.SetText(entry.InvoiceNum)
 			case 5:
-				label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
+				label.SetText(entry.Description)
 			case 6:
+				label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
+			case 7:
 				label.SetText("✏️ Editar")
 				label.TextStyle = fyne.TextStyle{Italic: true}
-			case 7:
+			case 8:
 				label.SetText("🗑️ Eliminar")
 				label.TextStyle = fyne.TextStyle{Italic: true}
 			}
 
-			// Color alternado de filas
 			if id.Row%2 == 0 {
 				bg.FillColor = theme.Color(theme.ColorNameHover)
 			} else {
@@ -133,29 +128,31 @@ func BuildUI(w fyne.Window) {
 			bg.Refresh()
 		},
 	)
-	
-	// Hacer clic en las celdas de editar/eliminar
+
+	// Ajustar anchos para las 9 columnas
+	ui.table.SetColumnWidth(0, 40)  // Nº
+	ui.table.SetColumnWidth(1, 100) // Fecha
+	ui.table.SetColumnWidth(2, 80)  // Tipo
+	ui.table.SetColumnWidth(3, 120) // Categoría
+	ui.table.SetColumnWidth(4, 100) // # Factura
+	ui.table.SetColumnWidth(5, 200) // Descripción
+	ui.table.SetColumnWidth(6, 100) // Monto
+	ui.table.SetColumnWidth(7, 80)  // Editar
+	ui.table.SetColumnWidth(8, 80)  // Eliminar
+
+	// Clic en las celdas de editar/eliminar (columnas 7 y 8)
 	ui.table.OnSelected = func(id widget.TableCellID) {
 		if id.Row == 0 {
-			return // Cabecera
+			return
 		}
 		index := id.Row - 1
 		switch id.Col {
-		case 6:
-			ui.startEdit(index)
 		case 7:
+			ui.startEdit(index)
+		case 8:
 			ui.deleteEntry(index)
 		}
 	}
-
-	ui.table.SetColumnWidth(0, 100)
-	ui.table.SetColumnWidth(1, 80)
-	ui.table.SetColumnWidth(2, 120)
-	ui.table.SetColumnWidth(3, 100)
-	ui.table.SetColumnWidth(4, 200)
-	ui.table.SetColumnWidth(5, 100)
-	ui.table.SetColumnWidth(6, 100)
-	ui.table.SetColumnWidth(7, 100)
 
 	// --- Formulario ---
 	ui.categorySelect = widget.NewSelect([]string{}, nil)
@@ -171,18 +168,18 @@ func BuildUI(w fyne.Window) {
 	ui.typeRadio.Required = true
 	ui.typeRadio.SetSelected("Entrada")
 
-	// Campos de entrada con tamaño adecuado
+	// Entradas de texto
 	ui.invoiceEntry = widget.NewEntry()
 	ui.invoiceEntry.SetPlaceHolder("# Factura")
-	ui.invoiceEntry.SetMinRowsVisible(1)
-	
 	ui.descEntry = widget.NewEntry()
 	ui.descEntry.SetPlaceHolder("Descripción")
-	ui.descEntry.SetMinRowsVisible(1)
-	
 	ui.amountEntry = widget.NewEntry()
 	ui.amountEntry.SetPlaceHolder("Monto (ej. 150.00)")
-	ui.amountEntry.SetMinRowsVisible(1)
+
+	// Nuevo campo para el día
+	ui.dayEntry = widget.NewEntry()
+	ui.dayEntry.SetPlaceHolder("Día (1-31)")
+	ui.dayEntry.SetText("1") // Valor por defecto
 
 	form := widget.NewForm(
 		widget.NewFormItem("Tipo", ui.typeRadio),
@@ -190,6 +187,7 @@ func BuildUI(w fyne.Window) {
 		widget.NewFormItem("# Factura", ui.invoiceEntry),
 		widget.NewFormItem("Descripción", ui.descEntry),
 		widget.NewFormItem("Monto", ui.amountEntry),
+		widget.NewFormItem("Día del mes", ui.dayEntry),
 	)
 
 	ui.addButton = widget.NewButton("Añadir", ui.onAddOrUpdateEntry)
@@ -203,7 +201,6 @@ func BuildUI(w fyne.Window) {
 		btnBox,
 	)
 
-	// Layout final
 	content := container.NewBorder(
 		topBar,
 		formBox,
@@ -228,9 +225,17 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 		dialog.ShowError(fmt.Errorf("Monto inválido"), ui.win)
 		return
 	}
+
+	// Leer día
+	day, err := strconv.Atoi(ui.dayEntry.Text)
+	if err != nil || day < 1 || day > 31 {
+		dialog.ShowError(fmt.Errorf("Día inválido (1-31)"), ui.win)
+		return
+	}
 	year, _ := strconv.Atoi(ui.yearSelect.Selected)
 	month := indexOfMonth(ui.monthSelect.Selected) + 1
-	date := time.Date(year, time.Month(month), time.Now().Day(), 0, 0, 0, 0, time.Local)
+	// Construir fecha (si el día es mayor que los días del mes, time.Date lo ajusta automáticamente)
+	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
 
 	entry := model.Entry{
 		Date:        date,
@@ -260,9 +265,11 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 		ui.entries = append(ui.entries, entry)
 	}
 
+	// Limpiar formulario
 	ui.invoiceEntry.SetText("")
 	ui.descEntry.SetText("")
 	ui.amountEntry.SetText("")
+	ui.dayEntry.SetText("1") // Reiniciar día
 	ui.table.Refresh()
 }
 
@@ -277,6 +284,7 @@ func (ui *mainUI) startEdit(index int) {
 	ui.invoiceEntry.SetText(entry.InvoiceNum)
 	ui.descEntry.SetText(entry.Description)
 	ui.amountEntry.SetText(fmt.Sprintf("%.2f", entry.Amount))
+	ui.dayEntry.SetText(strconv.Itoa(entry.Date.Day())) // Cargar día
 	ui.editingIndex = index
 	ui.addButton.SetText("Actualizar")
 	ui.cancelButton.Show()
@@ -301,9 +309,9 @@ func (ui *mainUI) onCancelEdit() {
 	ui.invoiceEntry.SetText("")
 	ui.descEntry.SetText("")
 	ui.amountEntry.SetText("")
+	ui.dayEntry.SetText("1")
 }
 
-// Genera el reporte Excel
 func (ui *mainUI) onGenerateReport() {
 	if len(ui.entries) == 0 {
 		dialog.ShowInformation("Sin datos", "No hay entradas para generar el reporte.", ui.win)
@@ -312,8 +320,8 @@ func (ui *mainUI) onGenerateReport() {
 	month := ui.monthSelect.Selected
 	year := ui.yearSelect.Selected
 	currency := ui.currencySelect.Selected
-	
-	dialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+
+	saveDialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 		if err != nil || writer == nil {
 			return
 		}
@@ -325,66 +333,27 @@ func (ui *mainUI) onGenerateReport() {
 			dialog.ShowInformation("Éxito", "Reporte generado correctamente.", ui.win)
 		}
 	}, ui.win)
-	
 	fileName := fmt.Sprintf("reporte_%s_%s_%s.xlsx", month, year, currency)
-	dialog.SetFileName(fileName)
-	dialog.Show()
+	saveDialog.SetFileName(fileName)
+	saveDialog.Show()
 }
 
-// Abre un Excel existente para cargar entradas
 func (ui *mainUI) onOpenExcel() {
-	fmt.Println("DEBUG: Abriendo diálogo de archivo...")
-	
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
-		fmt.Printf("DEBUG: Callback ejecutado. err=%v, reader=%v\n", err, reader)
-		
-		if err != nil {
-			fmt.Printf("DEBUG: Error: %v\n", err)
-			dialog.ShowError(err, ui.win)
-			return
-		}
-		if reader == nil {
-			fmt.Println("DEBUG: Usuario canceló")
+		if err != nil || reader == nil {
 			return
 		}
 		defer reader.Close()
-		
 		path := reader.URI().Path()
-		fmt.Printf("DEBUG: Archivo seleccionado: %s\n", path)
-		
 		entries, err := excel.ImportEntries(path)
 		if err != nil {
-			fmt.Printf("DEBUG: Error importando: %v\n", err)
 			dialog.ShowError(fmt.Errorf("Error al leer el archivo: %v", err), ui.win)
 			return
 		}
-		
-		fmt.Printf("DEBUG: Entradas cargadas: %d\n", len(entries))
 		ui.entries = entries
 		ui.table.Refresh()
 		dialog.ShowInformation("Cargado", fmt.Sprintf("Se cargaron %d entradas correctamente.", len(entries)), ui.win)
 	}, ui.win)
-	
-	fmt.Println("DEBUG: Diálogo mostrado")
-}
-
-// Guarda las entradas actuales en un Excel (para continuar después)
-func (ui *mainUI) onSave() {
-	dialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
-		if err != nil || writer == nil {
-			return
-		}
-		defer writer.Close()
-		err = excel.SaveEntries(ui.entries, writer)
-		if err != nil {
-			dialog.ShowError(err, ui.win)
-		} else {
-			dialog.ShowInformation("Guardado", "Datos guardados correctamente.", ui.win)
-		}
-	}, ui.win)
-	
-	dialog.SetFileName("marmur_datos.xlsx")
-	dialog.Show()
 }
 
 func indexOfMonth(month string) int {

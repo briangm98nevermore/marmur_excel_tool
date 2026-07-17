@@ -5,9 +5,8 @@ import (
 	"io"
 	"strconv"
 	"time"
-
+	"strings"
 	"marmur_excel_tool/model"
-
 	"github.com/xuri/excelize/v2"
 )
 
@@ -27,7 +26,7 @@ func GenerateReport(entries []model.Entry, month, year, currency string, w io.Wr
 
 	// ===== ESTILOS =====
 	
-	// Estilo título principal
+	// Estilo título principalddssf
 	titleStyle, _ := f.NewStyle(&excelize.Style{
 		Font: &excelize.Font{
 			Bold:   true,
@@ -412,10 +411,9 @@ func ImportEntries(path string) ([]model.Entry, error) {
 	}
 	defer f.Close()
 
-	// Intentar leer la hoja "Listado"
+	// Buscar hoja "Listado", si no existe usar la primera hoja
 	rows, err := f.GetRows("Listado")
 	if err != nil {
-		// Si no existe "Listado", intentar con la primera hoja
 		sheets := f.GetSheetList()
 		if len(sheets) > 0 {
 			rows, err = f.GetRows(sheets[0])
@@ -426,36 +424,36 @@ func ImportEntries(path string) ([]model.Entry, error) {
 			return nil, fmt.Errorf("el archivo no contiene hojas")
 		}
 	}
-	
+
 	var entries []model.Entry
 	for i, row := range rows {
 		if i == 0 {
-			// Saltar cabecera
-			continue
+			continue // cabecera
 		}
 		if len(row) < 6 {
 			continue
 		}
-		
 		date, err := time.Parse("02/01/2006", row[0])
 		if err != nil {
-			// Intentar otros formatos de fecha
+			// Intentar formato alternativo
 			date, err = time.Parse("2006-01-02", row[0])
 			if err != nil {
-				continue // Saltar fila si la fecha no es válida
+				continue
 			}
 		}
-		
-		amount, err := strconv.ParseFloat(row[5], 64)
+
+		// Parsear monto: soporta formato simple ("1500.00") o con moneda ("$ 1,500.00")
+		amountStr := row[5]
+		amount, err := parseAmount(amountStr)
 		if err != nil {
 			amount = 0
 		}
-		
+
 		currency := "USD" // Por defecto
 		if len(row) > 6 {
 			currency = row[6]
 		}
-		
+
 		entries = append(entries, model.Entry{
 			Date:        date,
 			Type:        row[1],
@@ -466,12 +464,26 @@ func ImportEntries(path string) ([]model.Entry, error) {
 			Currency:    currency,
 		})
 	}
-	
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("no se encontraron entradas válidas en el archivo")
 	}
-	
 	return entries, nil
+}
+
+// parseAmount convierte una cadena de monto con posible formato monetario a float64
+func parseAmount(s string) (float64, error) {
+	// Eliminar espacios
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("cadena vacía")
+	}
+	// Si contiene espacio, tomar la última parte (el número)
+	parts := strings.Split(s, " ")
+	lastPart := parts[len(parts)-1]
+	// Quitar comas de miles y cualquier otro carácter no numérico excepto '.' y '-'
+	cleaned := strings.ReplaceAll(lastPart, ",", "")
+	cleaned = strings.TrimLeft(cleaned, "$€CUP ") // Eliminar símbolos comunes
+	return strconv.ParseFloat(cleaned, 64)
 }
 // SaveEntries guarda las entradas en un Excel intermedio
 func SaveEntries(entries []model.Entry, w io.Writer) error {
