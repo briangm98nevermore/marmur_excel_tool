@@ -86,6 +86,9 @@ func BuildUI(w fyne.Window) {
 			bg := stack.Objects[0].(*canvas.Rectangle)
 			label := stack.Objects[1].(*widget.Label)
 
+			// ¡Resetear el estilo a normal siempre!
+    		label.TextStyle = fyne.TextStyle{}
+
 			if id.Row == 0 {
 				headers := []string{"Nº", "Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
 				label.SetText(headers[id.Col])
@@ -119,6 +122,8 @@ func BuildUI(w fyne.Window) {
 				label.SetText("🗑️ Eliminar")
 				label.TextStyle = fyne.TextStyle{Italic: true}
 			}
+
+			// Color alternado
 
 			if id.Row%2 == 0 {
 				bg.FillColor = theme.Color(theme.ColorNameHover)
