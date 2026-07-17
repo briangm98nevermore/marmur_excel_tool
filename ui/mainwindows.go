@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"marmur_excel_tool/excel"
@@ -121,7 +122,7 @@ func BuildUI(w fyne.Window) {
 					case 5:
 						label.SetText(entry.Description)
 					case 6:
-						label.SetText(fmt.Sprintf("%.2f %s", entry.Amount, entry.Currency))
+						label.SetText(formatAmount(entry.Amount) + " " + entry.Currency)
 					}
 					content = label
 				} else if id.Col == 7 {
@@ -375,4 +376,26 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// formatAmount formatea un monto con separador de miles (.) y dos decimales (,)
+// Ejemplo: 1234567.89 → "1.234.567,89"
+func formatAmount(amount float64) string {
+	// Convertir a string con dos decimales usando punto decimal
+	str := strconv.FormatFloat(amount, 'f', 2, 64)
+	// Separar parte entera y decimal
+	parts := strings.Split(str, ".")
+	intPart := parts[0]
+	decPart := ""
+	if len(parts) > 1 {
+		decPart = parts[1]
+	}
+	// Insertar puntos cada 3 dígitos en la parte entera
+	if len(intPart) > 3 {
+		for i := len(intPart) - 3; i > 0; i -= 3 {
+			intPart = intPart[:i] + "." + intPart[i:]
+		}
+	}
+	// Unir con coma decimal (o punto si prefieres)
+	return intPart + "," + decPart
 }

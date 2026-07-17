@@ -542,5 +542,15 @@ func formatCurrency(amount float64, currency string) string {
 	case "CUP":
 		symbol = "CUP "
 	}
-	return fmt.Sprintf("%s %.2f", symbol, amount)
+	// Formatear con separador de miles y dos decimales (punto miles, coma decimal)
+	str := strconv.FormatFloat(amount, 'f', 2, 64)
+	parts := strings.Split(str, ".")
+	intPart := parts[0]
+	decPart := parts[1]
+	if len(intPart) > 3 {
+		for i := len(intPart) - 3; i > 0; i -= 3 {
+			intPart = intPart[:i] + "." + intPart[i:]
+		}
+	}
+	return symbol + " " + intPart + "," + decPart
 }
