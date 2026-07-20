@@ -162,9 +162,9 @@ func BuildUI(w fyne.Window) {
 	ui.table.SetColumnWidth(0, 100)  // Nº
 	ui.table.SetColumnWidth(1, 150) // Fecha
 	ui.table.SetColumnWidth(2, 100)  // Tipo
-	ui.table.SetColumnWidth(3, 120) // Categoría
+	ui.table.SetColumnWidth(3, 150) // Categoría
 	ui.table.SetColumnWidth(4, 150) // # Factura
-	ui.table.SetColumnWidth(5, 800) // Descripción (más ancha)
+	ui.table.SetColumnWidth(5, 750) // Descripción (más ancha)
 	ui.table.SetColumnWidth(6, 250) // Monto
 	ui.table.SetColumnWidth(7, 100)  // Editar
 	ui.table.SetColumnWidth(8, 100)  // Eliminar
@@ -249,40 +249,39 @@ func (ui *mainUI) onAddOrUpdateEntry() {
         return
     }
 
-    // Validar factura
-    invoiceText := strings.TrimSpace(ui.invoiceEntry.Text)
-    var invoiceNum string
-    if ui.editingIndex == -1 {
-        // Nueva entrada: factura obligatoria y numérica positiva
-        if invoiceText == "" {
-            d := dialog.NewError(fmt.Errorf("El número de factura es obligatorio para nuevas entradas."), ui.win)
-            d.SetDismissText("Aceptar")
-            d.Show()
-            return
-        }
-        invNum, err := strconv.Atoi(invoiceText)
-        if err != nil || invNum <= 0 {
-            d := dialog.NewError(fmt.Errorf("El número de factura debe ser un entero positivo (ej. 123)."), ui.win)
-            d.SetDismissText("Aceptar")
-            d.Show()
-            return
-        }
-        invoiceNum = strconv.Itoa(invNum)
-    } else {
-        // Edición: si el campo está vacío, conservar el valor anterior
-        if invoiceText == "" {
-            invoiceNum = ui.entries[ui.editingIndex].InvoiceNum
-        } else {
-            invNum, err := strconv.Atoi(invoiceText)
-            if err != nil || invNum <= 0 {
-                d := dialog.NewError(fmt.Errorf("El número de factura debe ser un entero positivo (ej. 123)."), ui.win)
-                d.SetDismissText("Aceptar")
-                d.Show()
-                return
-            }
-            invoiceNum = strconv.Itoa(invNum)
-        }
-    }
+    // Validar factura (opcional, pero si se ingresa debe ser entero positivo)
+	invoiceText := strings.TrimSpace(ui.invoiceEntry.Text)
+	var invoiceNum string
+
+	if ui.editingIndex == -1 {
+		// Nueva entrada: factura opcional
+		if invoiceText == "" {
+			invoiceNum = ""
+		} else {
+			invNum, err := strconv.Atoi(invoiceText)
+			if err != nil || invNum <= 0 {
+				d := dialog.NewError(fmt.Errorf("El número de factura debe ser un entero positivo (ej. 123)."), ui.win)
+				d.SetDismissText("Aceptar")
+				d.Show()
+				return
+			}
+			invoiceNum = strconv.Itoa(invNum)
+		}
+	} else {
+		// Edición: si vacío, conservar el anterior; si no, validar
+		if invoiceText == "" {
+			invoiceNum = ui.entries[ui.editingIndex].InvoiceNum
+		} else {
+			invNum, err := strconv.Atoi(invoiceText)
+			if err != nil || invNum <= 0 {
+				d := dialog.NewError(fmt.Errorf("El número de factura debe ser un entero positivo (ej. 123)."), ui.win)
+				d.SetDismissText("Aceptar")
+				d.Show()
+				return
+			}
+			invoiceNum = strconv.Itoa(invNum)
+		}
+	}
 
     year, _ := strconv.Atoi(ui.yearSelect.Selected)
     month := indexOfMonth(ui.monthSelect.Selected) + 1
