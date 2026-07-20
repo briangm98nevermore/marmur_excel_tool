@@ -52,7 +52,13 @@ func BuildUI(w fyne.Window) {
 	ui.monthSelect = widget.NewSelect(months, nil)
 	ui.monthSelect.SetSelected(currentMonth)
 
-	years := []string{"2024", "2025", "2026", "2027"}
+	// Generar lista de años: desde hace 5 años hasta dentro de 5 años
+	currentYear := time.Now().Year()
+	var years []string
+	for y := currentYear - 5; y <= currentYear + 5; y++ {
+		years = append(years, strconv.Itoa(y))
+	}
+	
 	ui.yearSelect = widget.NewSelect(years, nil)
 	ui.yearSelect.SetSelected(strconv.Itoa(time.Now().Year()))
 
