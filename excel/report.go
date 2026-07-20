@@ -348,7 +348,7 @@ func GenerateReport(entries []model.Entry, month, year, currency string, w io.Wr
 		f.SetCellValue("Listado", fmt.Sprintf("C%d", row), e.Category)
 		f.SetCellValue("Listado", fmt.Sprintf("D%d", row), e.InvoiceNum)
 		f.SetCellValue("Listado", fmt.Sprintf("E%d", row), e.Description)
-		f.SetCellValue("Listado", fmt.Sprintf("F%d", row), formatCurrency(e.Amount, currency))
+		f.SetCellValue("Listado", fmt.Sprintf("F%d", row), e.Amount)
 		
 		// Color según tipo y fila alternada
 		if e.Type == "Entrada" {
@@ -411,12 +411,11 @@ func ImportEntries(path string) ([]model.Entry, error) {
 	}
 	defer f.Close()
 
-	// Buscar hoja "Listado", si no existe usar la primera hoja
-	rows, err := f.GetRows("Listado")
+	rows, err := f.GetRows("Listado", excelize.Options{RawCellValue: true})
 	if err != nil {
 		sheets := f.GetSheetList()
 		if len(sheets) > 0 {
-			rows, err = f.GetRows(sheets[0])
+			rows, err = f.GetRows(sheets[0], excelize.Options{RawCellValue: true})
 			if err != nil {
 				return nil, fmt.Errorf("no se pudieron leer los datos: %v", err)
 			}
@@ -427,31 +426,21 @@ func ImportEntries(path string) ([]model.Entry, error) {
 
 	var entries []model.Entry
 	for i, row := range rows {
-		if i == 0 {
-			continue // cabecera
-		}
-		if len(row) < 6 {
-			continue
-		}
+		if i == 0 { continue }
+		if len(row) < 6 { continue }
+
 		date, err := time.Parse("02/01/2006", row[0])
 		if err != nil {
-			// Intentar formato alternativo
 			date, err = time.Parse("2006-01-02", row[0])
-			if err != nil {
-				continue
-			}
+			if err != nil { continue }
 		}
 
-		// Parsear monto: soporta formato simple ("1500.00") o con moneda ("$ 1,500.00")
-		amountStr := row[5]
-		amount, err := parseAmount(amountStr)
-		if err != nil {
-			amount = 0
-		}
+		amount, err := parseAmount(row[5])
+		if err != nil { amount = 0 }
 
-		currency := "USD" // Por defecto
+		currency := "USD"
 		if len(row) > 6 {
-			currency = row[6]
+			currency = strings.TrimSpace(row[6])
 		}
 
 		entries = append(entries, model.Entry{
@@ -470,20 +459,57 @@ func ImportEntries(path string) ([]model.Entry, error) {
 	return entries, nil
 }
 
-// parseAmount convierte una cadena de monto con posible formato monetario a float64
+/// parseAmount convierte una cadena de monto (con posible formato) a float64
 func parseAmount(s string) (float64, error) {
-	// Eliminar espacios
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return 0, fmt.Errorf("cadena vacía")
+		return 0, fmt.Errorf("vacío")
 	}
-	// Si contiene espacio, tomar la última parte (el número)
+	// Si contiene espacio, separar código de moneda y número
 	parts := strings.Split(s, " ")
-	lastPart := parts[len(parts)-1]
-	// Quitar comas de miles y cualquier otro carácter no numérico excepto '.' y '-'
-	cleaned := strings.ReplaceAll(lastPart, ",", "")
-	cleaned = strings.TrimLeft(cleaned, "$€CUP ") // Eliminar símbolos comunes
-	return strconv.ParseFloat(cleaned, 64)
+	// Último elemento que no sea el código de moneda (asumimos que el código es USD/EUR/CUP)
+	// Tomamos la primera parte que contenga dígitos o caracteres numéricos.
+	numPart := s
+	for _, part := range parts {
+		if strings.ContainsAny(part, "0123456789") {
+			numPart = part
+			break
+		}
+	}
+	// Si no, tomamos la última parte
+	if !strings.ContainsAny(numPart, "0123456789") {
+		numPart = parts[len(parts)-1]
+	}
+
+	// Determinar formato:
+	// Si contiene coma y punto -> probablemente español (punto miles, coma decimal)
+	// Si contiene solo coma -> podría ser miles o decimal
+	// Si contiene solo punto -> decimal o miles
+
+	if strings.Contains(numPart, ",") && strings.Contains(numPart, ".") {
+		// Ej: "2.000,50" -> eliminar puntos, cambiar coma por punto
+		cleaned := strings.ReplaceAll(numPart, ".", "")
+		cleaned = strings.ReplaceAll(cleaned, ",", ".")
+		return strconv.ParseFloat(cleaned, 64)
+	} else if strings.Contains(numPart, ",") {
+		// Solo coma: puede ser "200,000" (miles) o "200,50" (decimal)
+		// Si hay más de 2 dígitos tras la coma y no hay punto, asumimos miles
+		lastCommaIdx := strings.LastIndex(numPart, ",")
+		afterComma := numPart[lastCommaIdx+1:]
+		if len(afterComma) <= 2 && !strings.Contains(numPart, ".") {
+			// Asumir coma decimal
+			cleaned := strings.Replace(numPart, ",", ".", 1)
+			return strconv.ParseFloat(cleaned, 64)
+		} else {
+			// Asumir coma de miles, quitar todas las comas
+			cleaned := strings.ReplaceAll(numPart, ",", "")
+			return strconv.ParseFloat(cleaned, 64)
+		}
+	} else {
+		// Sin comas: ej "200000" o "200000.50"
+		cleaned := strings.ReplaceAll(numPart, ",", "") // por si acaso
+		return strconv.ParseFloat(cleaned, 64)
+	}
 }
 // SaveEntries guarda las entradas en un Excel intermedio
 func SaveEntries(entries []model.Entry, w io.Writer) error {
@@ -533,24 +559,14 @@ func SaveEntries(entries []model.Entry, w io.Writer) error {
 	return f.Write(w)
 }
 
-// Formatea montos con símbolo de moneda
+// formatCurrency devuelve una cadena como "200,000 USD"
 func formatCurrency(amount float64, currency string) string {
-	symbol := "$"
-	switch currency {
-	case "EUR":
-		symbol = "€"
-	case "CUP":
-		symbol = "CUP "
-	}
-	// Formatear con separador de miles y dos decimales (punto miles, coma decimal)
-	str := strconv.FormatFloat(amount, 'f', 2, 64)
-	parts := strings.Split(str, ".")
-	intPart := parts[0]
-	decPart := parts[1]
-	if len(intPart) > 3 {
-		for i := len(intPart) - 3; i > 0; i -= 3 {
-			intPart = intPart[:i] + "." + intPart[i:]
+	intAmount := int64(amount)
+	str := strconv.FormatInt(intAmount, 10)
+	if len(str) > 3 {
+		for i := len(str) - 3; i > 0; i -= 3 {
+			str = str[:i] + "," + str[i:]
 		}
 	}
-	return symbol + " " + intPart + "," + decPart
+	return str + " " + currency
 }
