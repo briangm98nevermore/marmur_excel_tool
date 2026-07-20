@@ -232,53 +232,96 @@ func (ui *mainUI) updateCategorySelect() {
 }
 
 func (ui *mainUI) onAddOrUpdateEntry() {
-	amount, err := strconv.ParseFloat(ui.amountEntry.Text, 64)
-	if err != nil || amount <= 0 {
-		dialog.ShowError(fmt.Errorf("Monto inválido"), ui.win)
-		return
-	}
-	day, err := strconv.Atoi(ui.dayEntry.Text)
-	if err != nil || day < 1 || day > 31 {
-		dialog.ShowError(fmt.Errorf("Día inválido (1-31)"), ui.win)
-		return
-	}
-	year, _ := strconv.Atoi(ui.yearSelect.Selected)
-	month := indexOfMonth(ui.monthSelect.Selected) + 1
-	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+    // Validar monto
+    amount, err := strconv.ParseFloat(ui.amountEntry.Text, 64)
+    if err != nil || amount <= 0 {
+        d := dialog.NewError(fmt.Errorf("Monto inválido"), ui.win)
+        d.SetDismissText("Aceptar")
+        d.Show()
+        return
+    }
+    // Validar día
+    day, err := strconv.Atoi(ui.dayEntry.Text)
+    if err != nil || day < 1 || day > 31 {
+        d := dialog.NewError(fmt.Errorf("Día inválido (1-31)"), ui.win)
+        d.SetDismissText("Aceptar")
+        d.Show()
+        return
+    }
 
-	entry := model.Entry{
-		Date:        date,
-		Type:        ui.typeRadio.Selected,
-		Category:    ui.categorySelect.Selected,
-		InvoiceNum:  ui.invoiceEntry.Text,
-		Description: ui.descEntry.Text,
-		Amount:      amount,
-		Currency:    ui.currencySelect.Selected,
-	}
+    // Validar factura
+    invoiceText := strings.TrimSpace(ui.invoiceEntry.Text)
+    var invoiceNum string
+    if ui.editingIndex == -1 {
+        // Nueva entrada: factura obligatoria y numérica positiva
+        if invoiceText == "" {
+            d := dialog.NewError(fmt.Errorf("El número de factura es obligatorio para nuevas entradas."), ui.win)
+            d.SetDismissText("Aceptar")
+            d.Show()
+            return
+        }
+        invNum, err := strconv.Atoi(invoiceText)
+        if err != nil || invNum <= 0 {
+            d := dialog.NewError(fmt.Errorf("El número de factura debe ser un entero positivo (ej. 123)."), ui.win)
+            d.SetDismissText("Aceptar")
+            d.Show()
+            return
+        }
+        invoiceNum = strconv.Itoa(invNum)
+    } else {
+        // Edición: si el campo está vacío, conservar el valor anterior
+        if invoiceText == "" {
+            invoiceNum = ui.entries[ui.editingIndex].InvoiceNum
+        } else {
+            invNum, err := strconv.Atoi(invoiceText)
+            if err != nil || invNum <= 0 {
+                d := dialog.NewError(fmt.Errorf("El número de factura debe ser un entero positivo (ej. 123)."), ui.win)
+                d.SetDismissText("Aceptar")
+                d.Show()
+                return
+            }
+            invoiceNum = strconv.Itoa(invNum)
+        }
+    }
 
-	if ui.editingIndex >= 0 {
-		ui.entries[ui.editingIndex] = entry
-		ui.editingIndex = -1
-		ui.addButton.SetText("Añadir")
-		ui.cancelButton.Hide()
-	} else {
-		if entry.Type == "Entrada" {
-			if !contains(ui.incomeCategories, entry.Category) && entry.Category != "" {
-				ui.incomeCategories = append(ui.incomeCategories, entry.Category)
-			}
-		} else {
-			if !contains(ui.expenseCategories, entry.Category) && entry.Category != "" {
-				ui.expenseCategories = append(ui.expenseCategories, entry.Category)
-			}
-		}
-		ui.entries = append(ui.entries, entry)
-	}
+    year, _ := strconv.Atoi(ui.yearSelect.Selected)
+    month := indexOfMonth(ui.monthSelect.Selected) + 1
+    date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
 
-	ui.invoiceEntry.SetText("")
-	ui.descEntry.SetText("")
-	ui.amountEntry.SetText("")
-	ui.dayEntry.SetText("1")
-	ui.table.Refresh()
+    entry := model.Entry{
+        Date:        date,
+        Type:        ui.typeRadio.Selected,
+        Category:    ui.categorySelect.Selected,
+        InvoiceNum:  invoiceNum,
+        Description: ui.descEntry.Text,
+        Amount:      amount,
+        Currency:    ui.currencySelect.Selected,
+    }
+
+    if ui.editingIndex >= 0 {
+        ui.entries[ui.editingIndex] = entry
+        ui.editingIndex = -1
+        ui.addButton.SetText("Añadir")
+        ui.cancelButton.Hide()
+    } else {
+        if entry.Type == "Entrada" {
+            if !contains(ui.incomeCategories, entry.Category) && entry.Category != "" {
+                ui.incomeCategories = append(ui.incomeCategories, entry.Category)
+            }
+        } else {
+            if !contains(ui.expenseCategories, entry.Category) && entry.Category != "" {
+                ui.expenseCategories = append(ui.expenseCategories, entry.Category)
+            }
+        }
+        ui.entries = append(ui.entries, entry)
+    }
+
+    // Limpiar formulario
+    ui.invoiceEntry.SetText("")
+    ui.descEntry.SetText("")
+    ui.amountEntry.SetText("")
+    ui.dayEntry.SetText("1")
+    ui.table.Refresh()
 }
 
 func (ui *mainUI) startEdit(index int) {
@@ -299,15 +342,18 @@ func (ui *mainUI) startEdit(index int) {
 }
 
 func (ui *mainUI) deleteEntry(index int) {
-	if index < 0 || index >= len(ui.entries) {
-		return
-	}
-	dialog.ShowConfirm("Eliminar", "¿Eliminar esta entrada?", func(ok bool) {
-		if ok {
-			ui.entries = append(ui.entries[:index], ui.entries[index+1:]...)
-			ui.table.Refresh()
-		}
-	}, ui.win)
+    if index < 0 || index >= len(ui.entries) {
+        return
+    }
+    d := dialog.NewConfirm("Eliminar", "¿Eliminar esta entrada?", func(ok bool) {
+        if ok {
+            ui.entries = append(ui.entries[:index], ui.entries[index+1:]...)
+            ui.table.Refresh()
+        }
+    }, ui.win)
+    d.SetConfirmText("Sí")
+    d.SetDismissText("No")
+    d.Show()
 }
 
 func (ui *mainUI) onCancelEdit() {
