@@ -328,7 +328,7 @@ func GenerateReport(entries []model.Entry, month, year, currency string, w io.Wr
 	f.NewSheet("Listado")
 	
 	// Título
-	f.SetCellValue("Listado", "A1", "LISTADO DETALLADO DE TRANSACCIONES")
+	f.SetCellValue("Listado", "A1", "LISTADO DE ENTRADAS Y GASTOS")
 	f.MergeCell("Listado", "A1", "F1")
 	f.SetCellStyle("Listado", "A1", "F1", titleStyle)
 	
@@ -404,7 +404,7 @@ func GenerateReport(entries []model.Entry, month, year, currency string, w io.Wr
     f.SetCellValue("Listado", fmt.Sprintf("C%d", row), e.Category)
     f.SetCellValue("Listado", fmt.Sprintf("D%d", row), e.InvoiceNum)
     f.SetCellValue("Listado", fmt.Sprintf("E%d", row), e.Description)
-    f.SetCellValue("Listado", fmt.Sprintf("F%d", row), e.Amount)
+    f.SetCellValue("Listado", fmt.Sprintf("F%d", row), formatCurrency(e.Amount, currency))
 
     var styleID int
     if e.Type == "Entrada" {
