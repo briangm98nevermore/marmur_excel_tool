@@ -339,55 +339,88 @@ func GenerateReport(entries []model.Entry, month, year, currency string, w io.Wr
 		f.SetCellValue("Listado", cell, h)
 	}
 	f.SetCellStyle("Listado", "A3", "F3", headerStyle)
+
+	// Estilos de fila para entradas (verde)
+	incomeRowEven, _ := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"C6EFCE"},
+			Pattern: 1,
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "A5D6A7", Style: 1},
+			{Type: "right", Color: "A5D6A7", Style: 1},
+			{Type: "top", Color: "A5D6A7", Style: 1},
+			{Type: "bottom", Color: "A5D6A7", Style: 1},
+		},
+	})
+	incomeRowOdd, _ := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"D9F2D9"},
+			Pattern: 1,
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "A5D6A7", Style: 1},
+			{Type: "right", Color: "A5D6A7", Style: 1},
+			{Type: "top", Color: "A5D6A7", Style: 1},
+			{Type: "bottom", Color: "A5D6A7", Style: 1},
+		},
+	})
+
+	// Estilos de fila para gastos (rojo)
+	expenseRowEven, _ := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"FFC7CE"},
+			Pattern: 1,
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "EF9A9A", Style: 1},
+			{Type: "right", Color: "EF9A9A", Style: 1},
+			{Type: "top", Color: "EF9A9A", Style: 1},
+			{Type: "bottom", Color: "EF9A9A", Style: 1},
+		},
+	})
+	expenseRowOdd, _ := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"FFCDD2"},
+			Pattern: 1,
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "EF9A9A", Style: 1},
+			{Type: "right", Color: "EF9A9A", Style: 1},
+			{Type: "top", Color: "EF9A9A", Style: 1},
+			{Type: "bottom", Color: "EF9A9A", Style: 1},
+		},
+	})
 	
 	// Datos con filas alternadas
 	for i, e := range filtered {
-		row := i + 4
-		f.SetCellValue("Listado", fmt.Sprintf("A%d", row), e.Date.Format("02/01/2006"))
-		f.SetCellValue("Listado", fmt.Sprintf("B%d", row), e.Type)
-		f.SetCellValue("Listado", fmt.Sprintf("C%d", row), e.Category)
-		f.SetCellValue("Listado", fmt.Sprintf("D%d", row), e.InvoiceNum)
-		f.SetCellValue("Listado", fmt.Sprintf("E%d", row), e.Description)
-		f.SetCellValue("Listado", fmt.Sprintf("F%d", row), e.Amount)
-		
-		// Color según tipo y fila alternada
-		if e.Type == "Entrada" {
-			if i%2 == 0 {
-				// Estilo combinado para entradas filas pares
-				entryAltStyle, _ := f.NewStyle(&excelize.Style{
-					Fill: excelize.Fill{
-						Type:    "pattern",
-						Color:   []string{"E8F5E9"},
-						Pattern: 1,
-					},
-					Border: []excelize.Border{
-						{Type: "left", Color: "C8E6C9", Style: 1},
-						{Type: "right", Color: "C8E6C9", Style: 1},
-						{Type: "top", Color: "C8E6C9", Style: 1},
-						{Type: "bottom", Color: "C8E6C9", Style: 1},
-					},
-				})
-				f.SetCellStyle("Listado", fmt.Sprintf("A%d", row), fmt.Sprintf("F%d", row), entryAltStyle)
-			}
-		} else {
-			if i%2 == 0 {
-				// Estilo combinado para gastos filas pares
-				expenseAltStyle, _ := f.NewStyle(&excelize.Style{
-					Fill: excelize.Fill{
-						Type:    "pattern",
-						Color:   []string{"FFEBEE"},
-						Pattern: 1,
-					},
-					Border: []excelize.Border{
-						{Type: "left", Color: "FFCDD2", Style: 1},
-						{Type: "right", Color: "FFCDD2", Style: 1},
-						{Type: "top", Color: "FFCDD2", Style: 1},
-						{Type: "bottom", Color: "FFCDD2", Style: 1},
-					},
-				})
-				f.SetCellStyle("Listado", fmt.Sprintf("A%d", row), fmt.Sprintf("F%d", row), expenseAltStyle)
-			}
-		}
+    row := i + 4
+    f.SetCellValue("Listado", fmt.Sprintf("A%d", row), e.Date.Format("02/01/2006"))
+    f.SetCellValue("Listado", fmt.Sprintf("B%d", row), e.Type)
+    f.SetCellValue("Listado", fmt.Sprintf("C%d", row), e.Category)
+    f.SetCellValue("Listado", fmt.Sprintf("D%d", row), e.InvoiceNum)
+    f.SetCellValue("Listado", fmt.Sprintf("E%d", row), e.Description)
+    f.SetCellValue("Listado", fmt.Sprintf("F%d", row), e.Amount)
+
+    var styleID int
+    if e.Type == "Entrada" {
+        if i%2 == 0 {
+            styleID = incomeRowEven
+        } else {
+            styleID = incomeRowOdd
+        }
+    } else {
+        if i%2 == 0 {
+            styleID = expenseRowEven
+        } else {
+            styleID = expenseRowOdd
+        }
+    }
+    f.SetCellStyle("Listado", fmt.Sprintf("A%d", row), fmt.Sprintf("F%d", row), styleID)
 	}
 	
 	f.SetColWidth("Listado", "A", "A", 12)
