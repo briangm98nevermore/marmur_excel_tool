@@ -436,6 +436,35 @@ func GenerateReport(entries []model.Entry, month, year, currency string, w io.Wr
 	return f.Write(w)
 }
 
+// parseAmountAndCurrency procesa una cadena como "200,000 CUP" o "1500.50 EUR"
+// y devuelve el valor numérico y el código de moneda (si lo encuentra).
+func parseAmountAndCurrency(s string) (float64, string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, "", fmt.Errorf("vacío")
+	}
+	// Separar por espacio: la última parte que coincida con un código de moneda conocido
+	parts := strings.Split(s, " ")
+	currency := ""
+	numPart := s
+	// Buscar moneda conocida en cualquier parte final
+	for i := len(parts) - 1; i >= 0; i-- {
+		upper := strings.ToUpper(strings.TrimSpace(parts[i]))
+		if upper == "USD" || upper == "EUR" || upper == "CUP" {
+			currency = upper
+			numPart = strings.Join(parts[:i], " ")
+			break
+		}
+	}
+	// Si no encontramos moneda, todo es número
+	if currency == "" {
+		numPart = s
+	}
+
+	amount, err := parseAmount(numPart) // reutiliza la función parseAmount existente
+	return amount, currency, err
+}
+
 // ImportEntries lee un archivo Excel con el formato de guardado
 func ImportEntries(path string) ([]model.Entry, error) {
 	f, err := excelize.OpenFile(path)
@@ -468,12 +497,18 @@ func ImportEntries(path string) ([]model.Entry, error) {
 			if err != nil { continue }
 		}
 
-		amount, err := parseAmount(row[5])
-		if err != nil { amount = 0 }
+		// Parsear monto (número puro o formateado con moneda)
+		amount, extractedCurrency, err := parseAmountAndCurrency(row[5])
+		if err != nil {
+			amount = 0
+		}
 
+		// Determinar moneda: prioridad → columna G, luego extraída del monto, luego USD
 		currency := "USD"
-		if len(row) > 6 {
+		if len(row) > 6 && strings.TrimSpace(row[6]) != "" {
 			currency = strings.TrimSpace(row[6])
+		} else if extractedCurrency != "" {
+			currency = extractedCurrency
 		}
 
 		entries = append(entries, model.Entry{
