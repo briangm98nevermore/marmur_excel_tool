@@ -17,6 +17,12 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// Meses del año (global para poder usarla en onClear)
+var months = []string{
+	"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+	"Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+}
+
 type mainUI struct {
 	win               fyne.Window
 	entries           []model.Entry
@@ -46,8 +52,6 @@ func BuildUI(w fyne.Window) {
 	}
 
 	// --- Selectores superiores ---
-	months := []string{"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-		"Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"}
 	currentMonth := months[time.Now().Month()-1]
 	ui.monthSelect = widget.NewSelect(months, nil)
 	ui.monthSelect.SetSelected(currentMonth)
@@ -69,6 +73,7 @@ func BuildUI(w fyne.Window) {
 	btnReport.Importance = widget.HighImportance
 
 	btnOpen := widget.NewButton("Abrir Excel", ui.onOpenExcel)
+	btnClear := widget.NewButton("Limpiar", ui.onClear)
 
 	topBar := container.NewHBox(
 		widget.NewLabel("Mes:"), ui.monthSelect,
@@ -76,6 +81,7 @@ func BuildUI(w fyne.Window) {
 		widget.NewLabel("Moneda:"), ui.currencySelect,
 		btnReport,
 		btnOpen,
+		btnClear,
 	)
 
 	// --- Tabla con botones reales para editar/eliminar y texto truncado ---
@@ -425,6 +431,26 @@ func (ui *mainUI) onOpenExcel() {
 		ui.table.Refresh()
 		dialog.ShowInformation("Cargado", fmt.Sprintf("Se cargaron %d entradas correctamente.", len(entries)), ui.win)
 	}, ui.win)
+}
+
+func (ui *mainUI) onClear() {
+	if len(ui.entries) == 0 {
+		return // nada que limpiar
+	}
+	d := dialog.NewConfirm("Limpiar todo", "¿Estás seguro de eliminar todas las entradas?", func(ok bool) {
+		if ok {
+			ui.entries = nil
+			ui.table.Refresh()
+			// Restablecer selectores a valores por defecto
+			currentMonth := months[time.Now().Month()-1]
+			ui.monthSelect.SetSelected(currentMonth)
+			ui.yearSelect.SetSelected(strconv.Itoa(time.Now().Year()))
+			ui.currencySelect.SetSelected("USD")
+		}
+	}, ui.win)
+	d.SetConfirmText("Sí")
+	d.SetDismissText("No")
+	d.Show()
 }
 
 func indexOfMonth(month string) int {
