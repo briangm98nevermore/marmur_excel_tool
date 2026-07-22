@@ -404,6 +404,24 @@ func (ui *mainUI) onOpenExcel() {
 			return
 		}
 		ui.entries = entries
+
+		// Si se importaron datos, ajustar el selector de moneda al del primer registro
+		if len(entries) > 0 {
+			firstCurrency := entries[0].Currency
+			// Asegurarse de que el valor es válido (USD, EUR, CUP)
+			if firstCurrency == "USD" || firstCurrency == "EUR" || firstCurrency == "CUP" {
+				ui.currencySelect.SetSelected(firstCurrency)
+			}
+		}
+
+		// sincronizar mes y año con la fecha del primer registro
+		if len(entries) > 0 {
+			firstDate := entries[0].Date
+			months := []string{"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+				"Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"}
+			ui.monthSelect.SetSelected(months[firstDate.Month()-1])
+			ui.yearSelect.SetSelected(strconv.Itoa(firstDate.Year()))
+		}
 		ui.table.Refresh()
 		dialog.ShowInformation("Cargado", fmt.Sprintf("Se cargaron %d entradas correctamente.", len(entries)), ui.win)
 	}, ui.win)
