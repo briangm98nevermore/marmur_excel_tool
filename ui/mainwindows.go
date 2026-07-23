@@ -437,7 +437,7 @@ func (ui *mainUI) onClear() {
 	if len(ui.entries) == 0 {
 		return // nada que limpiar
 	}
-	d := dialog.NewConfirm("Limpiar todo", "¿Estás seguro de eliminar todas las entradas?", func(ok bool) {
+	d := dialog.NewConfirm("Limpiar todo", "¿Estás seguro de limpiar todas las entradas?", func(ok bool) {
 		if ok {
 			ui.entries = nil
 			ui.table.Refresh()
