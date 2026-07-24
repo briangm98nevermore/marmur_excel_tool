@@ -543,7 +543,7 @@ func createDetailedSheet(f *excelize.File, sheetName string,
     incomeStyle, expenseStyle int, total float64, currency string) {
 
     f.NewSheet(sheetName)
-    f.SetCellValue(sheetName, "A1", fmt.Sprintf("LISTADO DE %s", strings.ToUpper(sheetName)))
+    f.SetCellValue(sheetName, "A1", fmt.Sprintf("RESUMEN DE %s", strings.ToUpper(sheetName)))
     f.MergeCell(sheetName, "A1", "G1")
     f.SetCellStyle(sheetName, "A1", "G1", titleStyle)
 
