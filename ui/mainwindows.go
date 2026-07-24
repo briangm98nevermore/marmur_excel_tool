@@ -385,7 +385,7 @@ func (ui *mainUI) onGenerateReport() {
 			return
 		}
 		defer writer.Close()
-		err = excel.GenerateReport(ui.entries, month, year, currency, writer)
+		err = excel.GenerateReport(ui.entries, month, year, currency, ui.incomeCategories, ui.expenseCategories, writer)
 		if err != nil {
 			dialog.ShowError(err, ui.win)
 		} else {
