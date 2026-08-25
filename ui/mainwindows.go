@@ -10,6 +10,9 @@ import (
 	"marmur_excel_tool/excel"
 	"marmur_excel_tool/model"
 
+	"image/color"
+
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -163,11 +166,19 @@ func BuildUI(w fyne.Window) {
 					content = btn
 				}
 
-				// Color de fondo alternado
+				// Color de fondo según tipo y fila (alternancia de tono)
 				if id.Row%2 == 0 {
-					bg.FillColor = theme.Color(theme.ColorNameHover)
+					if entry.Type == "Entrada" {
+						bg.FillColor = color.NRGBA{R: 198, G: 239, B: 206, A: 255} // verde claro
+					} else {
+						bg.FillColor = color.NRGBA{R: 255, G: 199, B: 206, A: 255} // rojo claro
+					}
 				} else {
-					bg.FillColor = theme.Color(theme.ColorNameBackground)
+					if entry.Type == "Entrada" {
+						bg.FillColor = color.NRGBA{R: 217, G: 242, B: 217, A: 255} // verde un poco más claro
+					} else {
+						bg.FillColor = color.NRGBA{R: 255, G: 205, B: 210, A: 255} // rojo un poco más claro
+					}
 				}
 			}
 
