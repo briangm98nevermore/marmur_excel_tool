@@ -33,7 +33,8 @@ type mainUI struct {
 	monthSelect       *widget.Select
 	yearSelect        *widget.Select
 	currencySelect    *widget.Select
-	table             *widget.Table
+	incomeTable    	  *widget.Table
+	expenseTable   	  *widget.Table
 	typeRadio         *widget.RadioGroup
 	categorySelect    *widget.Select
 	invoiceEntry      *widget.Entry
@@ -47,6 +48,10 @@ type mainUI struct {
 	cancelButton      *widget.Button
 	displayEntries         []model.Entry // copia ordenada para mostrar
     displayOriginalIndices []int          // índice en ui.entries correspondiente a cada fila mostrada
+	displayIncomeEntries  []model.Entry
+	displayIncomeIndices  []int
+	displayExpenseEntries []model.Entry
+	displayExpenseIndices []int
 }
 
 type indexedEntry struct {
@@ -98,105 +103,14 @@ func BuildUI(w fyne.Window) {
 	)
 
 	// --- Tabla con botones reales para editar/eliminar y texto truncado ---
-	ui.table = widget.NewTable(
-		func() (int, int) { return len(ui.displayEntries) + 1, 9 },
-		func() fyne.CanvasObject {
-			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-			// Label base con truncamiento habilitado
-			label := widget.NewLabel("")
-			label.Truncation = fyne.TextTruncateEllipsis
-			return container.NewStack(bg, label)
-		},
-		func(id widget.TableCellID, obj fyne.CanvasObject) {
-			stack := obj.(*fyne.Container)
-			bg := stack.Objects[0].(*canvas.Rectangle)
+	// --- Dos tablas separadas con pestañas ---
+	ui.incomeTable = createEntryTable(ui, "Entrada")
+	ui.expenseTable = createEntryTable(ui, "Gasto")
 
-			// Reemplazar contenido preservando el fondo
-			if len(stack.Objects) > 1 {
-				stack.Remove(stack.Objects[1])
-			}
-
-			var content fyne.CanvasObject
-
-			if id.Row == 0 {
-				// Cabecera
-				headers := []string{"Nº", "Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
-				label := widget.NewLabel(headers[id.Col])
-				label.TextStyle = fyne.TextStyle{Bold: true}
-				label.Truncation = fyne.TextTruncateEllipsis
-				content = label
-				bg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
-			} else {
-				entry := ui.displayEntries[id.Row-1]
-
-				if id.Col < 7 {
-					// Columnas de datos con truncamiento
-					label := widget.NewLabel("")
-					label.Truncation = fyne.TextTruncateEllipsis
-					switch id.Col {
-					case 0:
-						label.SetText(strconv.Itoa(id.Row))
-					case 1:
-						label.SetText(entry.Date.Format("02/01/2006"))
-					case 2:
-						label.SetText(entry.Type)
-					case 3:
-						label.SetText(entry.Category)
-					case 4:
-						label.SetText(entry.InvoiceNum)
-					case 5:
-						label.SetText(entry.Description)
-					case 6:
-						label.SetText(formatAmountDisplay(entry.Amount, entry.Currency))
-					}
-					content = label
-				} else if id.Col == 7 {
-					originalIndex := ui.displayOriginalIndices[id.Row-1]
-					btn := widget.NewButton("Editar", func() { 
-						ui.startEdit(originalIndex)
-					})
-					btn.Importance = widget.LowImportance
-					content = btn
-				} else if id.Col == 8 {
-					originalIndex := ui.displayOriginalIndices[id.Row-1]
-					btn := widget.NewButton("Eliminar", func() {
-						ui.deleteEntry(originalIndex)
-					})
-					btn.Importance = widget.DangerImportance
-					content = btn
-				}
-
-				// Color de fondo según tipo y fila (alternancia de tono)
-				if id.Row%2 == 0 {
-					if entry.Type == "Entrada" {
-						bg.FillColor = color.NRGBA{R: 198, G: 239, B: 206, A: 255} // verde claro
-					} else {
-						bg.FillColor = color.NRGBA{R: 255, G: 199, B: 206, A: 255} // rojo claro
-					}
-				} else {
-					if entry.Type == "Entrada" {
-						bg.FillColor = color.NRGBA{R: 217, G: 242, B: 217, A: 255} // verde un poco más claro
-					} else {
-						bg.FillColor = color.NRGBA{R: 255, G: 205, B: 210, A: 255} // rojo un poco más claro
-					}
-				}
-			}
-
-			bg.Refresh()
-			stack.Add(content)
-		},
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Entradas", ui.incomeTable),
+		container.NewTabItem("Gastos", ui.expenseTable),
 	)
-
-	// Anchos de columna ajustados
-	ui.table.SetColumnWidth(0, 100)  // Nº
-	ui.table.SetColumnWidth(1, 150) // Fecha
-	ui.table.SetColumnWidth(2, 100)  // Tipo
-	ui.table.SetColumnWidth(3, 150) // Categoría
-	ui.table.SetColumnWidth(4, 150) // # Factura
-	ui.table.SetColumnWidth(5, 750) // Descripción (más ancha)
-	ui.table.SetColumnWidth(6, 250) // Monto
-	ui.table.SetColumnWidth(7, 100)  // Editar
-	ui.table.SetColumnWidth(8, 100)  // Eliminar
 
 	// --- Formulario ---
 	ui.categorySelect = widget.NewSelect([]string{}, nil)
@@ -242,11 +156,11 @@ func BuildUI(w fyne.Window) {
 		btnBox,
 	)
 
-	content := container.NewBorder(
+		content := container.NewBorder(
 		topBar,
 		formBox,
 		nil, nil,
-		ui.table,
+		tabs,
 	)
 	w.SetContent(content)
 }
@@ -350,7 +264,8 @@ func (ui *mainUI) onAddOrUpdateEntry() {
     ui.amountEntry.SetText("")
     ui.dayEntry.SetText("1")
     ui.rebuildDisplay()
-    ui.table.Refresh()
+    ui.incomeTable.Refresh()
+	ui.expenseTable.Refresh()
 }
 
 func (ui *mainUI) startEdit(index int) {
@@ -378,7 +293,8 @@ func (ui *mainUI) deleteEntry(index int) {
         if ok {
 			ui.entries = append(ui.entries[:index], ui.entries[index+1:]...)
 			ui.rebuildDisplay()
-			ui.table.Refresh()
+			ui.incomeTable.Refresh()
+			ui.expenseTable.Refresh()
 		}
     }, ui.win)
     d.SetConfirmText("Sí")
@@ -436,7 +352,8 @@ func (ui *mainUI) onOpenExcel() {
 		}
 		ui.entries = entries
 		ui.rebuildDisplay()
-		ui.table.Refresh()
+		ui.incomeTable.Refresh()
+		ui.expenseTable.Refresh()
 
 		// Si se importaron datos, ajustar el selector de moneda al del primer registro
 		if len(entries) > 0 {
@@ -468,7 +385,8 @@ func (ui *mainUI) onClear() {
 		if ok {
 			ui.entries = nil
 			ui.rebuildDisplay()
-			ui.table.Refresh()
+			ui.incomeTable.Refresh()
+			ui.expenseTable.Refresh()
 			// Restablecer selectores a valores por defecto
 			currentMonth := months[time.Now().Month()-1]
 			ui.monthSelect.SetSelected(currentMonth)
@@ -541,9 +459,10 @@ func sortIndexedByCategory(entries []indexedEntry, order []string) {
 }
 
 func (ui *mainUI) rebuildDisplay() {
+
     var all []indexedEntry
     for i, e := range ui.entries {
-        all = append(all, indexedEntry{entry: e, idx: i})
+        all = append(all, indexedEntry{e, i})
     }
 
     var income, expense []indexedEntry
@@ -558,14 +477,135 @@ func (ui *mainUI) rebuildDisplay() {
     sortIndexedByCategory(income, ui.incomeCategories)
     sortIndexedByCategory(expense, ui.expenseCategories)
 
+    // Llenar slices combinados (por si aún se usan)
     ui.displayEntries = ui.displayEntries[:0]
     ui.displayOriginalIndices = ui.displayOriginalIndices[:0]
+    ui.displayIncomeEntries = ui.displayIncomeEntries[:0]
+    ui.displayIncomeIndices = ui.displayIncomeIndices[:0]
+    ui.displayExpenseEntries = ui.displayExpenseEntries[:0]
+    ui.displayExpenseIndices = ui.displayExpenseIndices[:0]
+
     for _, ie := range income {
+        ui.displayIncomeEntries = append(ui.displayIncomeEntries, ie.entry)
+        ui.displayIncomeIndices = append(ui.displayIncomeIndices, ie.idx)
         ui.displayEntries = append(ui.displayEntries, ie.entry)
         ui.displayOriginalIndices = append(ui.displayOriginalIndices, ie.idx)
     }
     for _, ie := range expense {
+        ui.displayExpenseEntries = append(ui.displayExpenseEntries, ie.entry)
+        ui.displayExpenseIndices = append(ui.displayExpenseIndices, ie.idx)
         ui.displayEntries = append(ui.displayEntries, ie.entry)
         ui.displayOriginalIndices = append(ui.displayOriginalIndices, ie.idx)
     }
+}
+
+func createEntryTable(ui *mainUI, tipo string) *widget.Table {
+    table := widget.NewTable(
+        func() (int, int) {
+            if tipo == "Entrada" {
+                return len(ui.displayIncomeEntries) + 1, 9
+            }
+            return len(ui.displayExpenseEntries) + 1, 9
+        },
+        func() fyne.CanvasObject {
+            bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+            label := widget.NewLabel("")
+            label.Truncation = fyne.TextTruncateEllipsis
+            return container.NewStack(bg, label)
+        },
+        func(id widget.TableCellID, obj fyne.CanvasObject) {
+            stack := obj.(*fyne.Container)
+            bg := stack.Objects[0].(*canvas.Rectangle)
+
+            if len(stack.Objects) > 1 {
+                stack.Remove(stack.Objects[1])
+            }
+
+            var content fyne.CanvasObject
+
+            if id.Row == 0 {
+                headers := []string{"Nº", "Fecha", "Tipo", "Categoría", "# Factura", "Descripción", "Monto", "Editar", "Eliminar"}
+                label := widget.NewLabel(headers[id.Col])
+                label.TextStyle = fyne.TextStyle{Bold: true}
+                label.Truncation = fyne.TextTruncateEllipsis
+                content = label
+                bg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
+            } else {
+                var entry model.Entry
+                var originalIndex int
+                if tipo == "Entrada" {
+                    entry = ui.displayIncomeEntries[id.Row-1]
+                    originalIndex = ui.displayIncomeIndices[id.Row-1]
+                } else {
+                    entry = ui.displayExpenseEntries[id.Row-1]
+                    originalIndex = ui.displayExpenseIndices[id.Row-1]
+                }
+
+                if id.Col < 7 {
+                    label := widget.NewLabel("")
+                    label.Truncation = fyne.TextTruncateEllipsis
+                    switch id.Col {
+                    case 0:
+                        label.SetText(strconv.Itoa(id.Row))
+                    case 1:
+                        label.SetText(entry.Date.Format("02/01/2006"))
+                    case 2:
+                        label.SetText(entry.Type)
+                    case 3:
+                        label.SetText(entry.Category)
+                    case 4:
+                        label.SetText(entry.InvoiceNum)
+                    case 5:
+                        label.SetText(entry.Description)
+                    case 6:
+                        label.SetText(formatAmountDisplay(entry.Amount, entry.Currency))
+                    }
+                    content = label
+                } else if id.Col == 7 {
+                    btn := widget.NewButton("Editar", func() {
+                        ui.startEdit(originalIndex)
+                    })
+                    btn.Importance = widget.LowImportance
+                    content = btn
+                } else if id.Col == 8 {
+                    btn := widget.NewButton("Eliminar", func() {
+                        ui.deleteEntry(originalIndex)
+                    })
+                    btn.Importance = widget.DangerImportance
+                    content = btn
+                }
+
+                // Colores según tipo
+                if id.Row%2 == 0 {
+                    if entry.Type == "Entrada" {
+                        bg.FillColor = color.NRGBA{R: 198, G: 239, B: 206, A: 255}
+                    } else {
+                        bg.FillColor = color.NRGBA{R: 255, G: 199, B: 206, A: 255}
+                    }
+                } else {
+                    if entry.Type == "Entrada" {
+                        bg.FillColor = color.NRGBA{R: 217, G: 242, B: 217, A: 255}
+                    } else {
+                        bg.FillColor = color.NRGBA{R: 255, G: 205, B: 210, A: 255}
+                    }
+                }
+            }
+
+            bg.Refresh()
+            stack.Add(content)
+        },
+    )
+
+    // Anchos
+    table.SetColumnWidth(0, 100)
+    table.SetColumnWidth(1, 150)
+    table.SetColumnWidth(2, 100)
+    table.SetColumnWidth(3, 150)
+    table.SetColumnWidth(4, 150)
+    table.SetColumnWidth(5, 750)
+    table.SetColumnWidth(6, 250)
+    table.SetColumnWidth(7, 100)
+    table.SetColumnWidth(8, 100)
+
+    return table
 }
