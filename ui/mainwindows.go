@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"sort"
 
 	"marmur_excel_tool/excel"
 	"marmur_excel_tool/model"
@@ -41,6 +42,13 @@ type mainUI struct {
 	editingIndex      int
 	addButton         *widget.Button
 	cancelButton      *widget.Button
+	displayEntries         []model.Entry // copia ordenada para mostrar
+    displayOriginalIndices []int          // índice en ui.entries correspondiente a cada fila mostrada
+}
+
+type indexedEntry struct {
+    entry model.Entry
+    idx   int
 }
 
 func BuildUI(w fyne.Window) {
@@ -50,6 +58,8 @@ func BuildUI(w fyne.Window) {
 		expenseCategories: append([]string{}, model.DefaultExpenseCategories...),
 		editingIndex:     -1,
 	}
+
+	ui.rebuildDisplay()
 
 	// --- Selectores superiores ---
 	currentMonth := months[time.Now().Month()-1]
@@ -86,7 +96,7 @@ func BuildUI(w fyne.Window) {
 
 	// --- Tabla con botones reales para editar/eliminar y texto truncado ---
 	ui.table = widget.NewTable(
-		func() (int, int) { return len(ui.entries) + 1, 9 },
+		func() (int, int) { return len(ui.displayEntries) + 1, 9 },
 		func() fyne.CanvasObject {
 			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
 			// Label base con truncamiento habilitado
@@ -114,7 +124,7 @@ func BuildUI(w fyne.Window) {
 				content = label
 				bg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
 			} else {
-				entry := ui.entries[id.Row-1]
+				entry := ui.displayEntries[id.Row-1]
 
 				if id.Col < 7 {
 					// Columnas de datos con truncamiento
@@ -138,14 +148,16 @@ func BuildUI(w fyne.Window) {
 					}
 					content = label
 				} else if id.Col == 7 {
-					btn := widget.NewButton("Editar", func() {
-						ui.startEdit(id.Row - 1)
+					originalIndex := ui.displayOriginalIndices[id.Row-1]
+					btn := widget.NewButton("Editar", func() { 
+						ui.startEdit(originalIndex)
 					})
 					btn.Importance = widget.LowImportance
 					content = btn
 				} else if id.Col == 8 {
+					originalIndex := ui.displayOriginalIndices[id.Row-1]
 					btn := widget.NewButton("Eliminar", func() {
-						ui.deleteEntry(id.Row - 1)
+						ui.deleteEntry(originalIndex)
 					})
 					btn.Importance = widget.DangerImportance
 					content = btn
@@ -321,11 +333,12 @@ func (ui *mainUI) onAddOrUpdateEntry() {
         ui.entries = append(ui.entries, entry)
     }
 
-    // Limpiar formulario
+        // Limpiar formulario
     ui.invoiceEntry.SetText("")
     ui.descEntry.SetText("")
     ui.amountEntry.SetText("")
     ui.dayEntry.SetText("1")
+    ui.rebuildDisplay()
     ui.table.Refresh()
 }
 
@@ -352,9 +365,10 @@ func (ui *mainUI) deleteEntry(index int) {
     }
     d := dialog.NewConfirm("Eliminar", "¿Eliminar esta entrada?", func(ok bool) {
         if ok {
-            ui.entries = append(ui.entries[:index], ui.entries[index+1:]...)
-            ui.table.Refresh()
-        }
+			ui.entries = append(ui.entries[:index], ui.entries[index+1:]...)
+			ui.rebuildDisplay()
+			ui.table.Refresh()
+		}
     }, ui.win)
     d.SetConfirmText("Sí")
     d.SetDismissText("No")
@@ -410,6 +424,8 @@ func (ui *mainUI) onOpenExcel() {
 			return
 		}
 		ui.entries = entries
+		ui.rebuildDisplay()
+		ui.table.Refresh()
 
 		// Si se importaron datos, ajustar el selector de moneda al del primer registro
 		if len(entries) > 0 {
@@ -428,7 +444,7 @@ func (ui *mainUI) onOpenExcel() {
 			ui.monthSelect.SetSelected(months[firstDate.Month()-1])
 			ui.yearSelect.SetSelected(strconv.Itoa(firstDate.Year()))
 		}
-		ui.table.Refresh()
+		
 		dialog.ShowInformation("Cargado", fmt.Sprintf("Se cargaron %d entradas correctamente.", len(entries)), ui.win)
 	}, ui.win)
 }
@@ -440,6 +456,7 @@ func (ui *mainUI) onClear() {
 	d := dialog.NewConfirm("Limpiar todo", "¿Estás seguro de limpiar todas las entradas?", func(ok bool) {
 		if ok {
 			ui.entries = nil
+			ui.rebuildDisplay()
 			ui.table.Refresh()
 			// Restablecer selectores a valores por defecto
 			currentMonth := months[time.Now().Month()-1]
@@ -485,4 +502,59 @@ func formatAmountDisplay(amount float64, currency string) string {
 		}
 	}
 	return str + " " + currency
+}
+
+func sortIndexedByCategory(entries []indexedEntry, order []string) {
+    rank := make(map[string]int)
+    for i, cat := range order {
+        rank[cat] = i
+    }
+    sort.Slice(entries, func(i, j int) bool {
+        ci, cj := entries[i].entry.Category, entries[j].entry.Category
+        ri, oki := rank[ci]
+        rj, okj := rank[cj]
+        if oki && okj {
+            if ri != rj {
+                return ri < rj
+            }
+        } else if oki {
+            return true
+        } else if okj {
+            return false
+        }
+        if ci != cj {
+            return ci < cj
+        }
+        return entries[i].entry.Date.Before(entries[j].entry.Date)
+    })
+}
+
+func (ui *mainUI) rebuildDisplay() {
+    var all []indexedEntry
+    for i, e := range ui.entries {
+        all = append(all, indexedEntry{entry: e, idx: i})
+    }
+
+    var income, expense []indexedEntry
+    for _, ie := range all {
+        if ie.entry.Type == "Entrada" {
+            income = append(income, ie)
+        } else {
+            expense = append(expense, ie)
+        }
+    }
+
+    sortIndexedByCategory(income, ui.incomeCategories)
+    sortIndexedByCategory(expense, ui.expenseCategories)
+
+    ui.displayEntries = ui.displayEntries[:0]
+    ui.displayOriginalIndices = ui.displayOriginalIndices[:0]
+    for _, ie := range income {
+        ui.displayEntries = append(ui.displayEntries, ie.entry)
+        ui.displayOriginalIndices = append(ui.displayOriginalIndices, ie.idx)
+    }
+    for _, ie := range expense {
+        ui.displayEntries = append(ui.displayEntries, ie.entry)
+        ui.displayOriginalIndices = append(ui.displayOriginalIndices, ie.idx)
+    }
 }
