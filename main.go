@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	a := app.NewWithID("com.marmur.exceltool")
-	w := a.NewWindow("Marmur Excel Tool")
+	a := app.NewWithID("com.balance_sheet_tool")
+	w := a.NewWindow("Balance Sheet Tool")
 
 	// Aplicar tema con factor de escala (1.3 = un 30% más grandes)
 	a.Settings().SetTheme(&scaledTheme{factor: 1.3})
