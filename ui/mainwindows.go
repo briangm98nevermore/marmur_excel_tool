@@ -134,7 +134,6 @@ func BuildUI(w fyne.Window) {
 	ui.amountEntry.SetPlaceHolder("Monto (ej. 150.00)")
 	ui.dayEntry = widget.NewEntry()
 	ui.dayEntry.SetPlaceHolder("Día (1-31)")
-	ui.dayEntry.SetText("1")
 
 	form := widget.NewForm(
 		widget.NewFormItem("Tipo", ui.typeRadio),
