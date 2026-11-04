@@ -333,13 +333,21 @@ func (ui *mainUI) onGenerateReport() {
 			dialog.ShowInformation("Éxito", "Reporte generado correctamente.", ui.win)
 		}
 	}, ui.win)
+
 	fileName := fmt.Sprintf("reporte_%s_%s_%s.xlsx", month, year, currency)
 	saveDialog.SetFileName(fileName)
+
+	// Mostrar primero y redimensionar después
 	saveDialog.Show()
+	winSize := ui.win.Canvas().Size()
+	saveDialog.Resize(fyne.NewSize(
+		maxFloat32(winSize.Width*0.9, 900),
+		maxFloat32(winSize.Height*0.85, 600),
+	))
 }
 
 func (ui *mainUI) onOpenExcel() {
-	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
+	d := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 		if err != nil || reader == nil {
 			return
 		}
@@ -355,26 +363,29 @@ func (ui *mainUI) onOpenExcel() {
 		ui.incomeTable.Refresh()
 		ui.expenseTable.Refresh()
 
-		// Si se importaron datos, ajustar el selector de moneda al del primer registro
 		if len(entries) > 0 {
 			firstCurrency := entries[0].Currency
-			// Asegurarse de que el valor es válido (USD, EUR, CUP)
 			if firstCurrency == "USD" || firstCurrency == "EUR" || firstCurrency == "CUP" {
 				ui.currencySelect.SetSelected(firstCurrency)
 			}
 		}
 
-		// sincronizar mes y año con la fecha del primer registro
 		if len(entries) > 0 {
 			firstDate := entries[0].Date
-			months := []string{"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-				"Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"}
 			ui.monthSelect.SetSelected(months[firstDate.Month()-1])
 			ui.yearSelect.SetSelected(strconv.Itoa(firstDate.Year()))
 		}
-		
+
 		dialog.ShowInformation("Cargado", fmt.Sprintf("Se cargaron %d entradas correctamente.", len(entries)), ui.win)
 	}, ui.win)
+
+	// Mostrar primero y redimensionar después
+	d.Show()
+	winSize := ui.win.Canvas().Size()
+	d.Resize(fyne.NewSize(
+		maxFloat32(winSize.Width*0.9, 900),
+		maxFloat32(winSize.Height*0.85, 600),
+	))
 }
 
 func (ui *mainUI) onClear() {
@@ -408,6 +419,14 @@ func indexOfMonth(month string) int {
 		}
 	}
 	return 0
+}
+
+// maxFloat32 devuelve el mayor de dos float32.
+func maxFloat32(a, b float32) float32 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func contains(slice []string, item string) bool {

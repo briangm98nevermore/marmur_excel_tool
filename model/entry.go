@@ -13,5 +13,5 @@ type Entry struct {
 }
 
 // Nomencladores iniciales
-var DefaultIncomeCategories = []string{"Saldo inicial", "Empresa", "Cambios", "Creditos", "Otros"}
-var DefaultExpenseCategories = []string{"Casa", "Almacen", "Hermes", "Pagos", "Otros"}
+var DefaultIncomeCategories = []string{"Saldo inicial", "Empresa", "Cambios", "Créditos", "Otros"}
+var DefaultExpenseCategories = []string{"Casa", "Almacén", "Irma Administración", "Pagos", "Otros"}
