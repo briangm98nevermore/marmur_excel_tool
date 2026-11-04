@@ -384,57 +384,50 @@ func extractDataRows(allRows [][]string) [][]string {
     return data
 }
 
-/// parseAmount convierte una cadena de monto (con posible formato) a float64
 func parseAmount(s string) (float64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("vacío")
 	}
-	// Si contiene espacio, separar código de moneda y número
-	parts := strings.Split(s, " ")
-	// Último elemento que no sea el código de moneda (asumimos que el código es USD/EUR/CUP)
-	// Tomamos la primera parte que contenga dígitos o caracteres numéricos.
-	numPart := s
-	for _, part := range parts {
-		if strings.ContainsAny(part, "0123456789") {
-			numPart = part
-			break
-		}
+
+	// Quitar códigos de moneda y espacios internos
+	for _, code := range []string{"USD", "EUR", "CUP"} {
+		s = strings.ReplaceAll(s, code, "")
 	}
-	// Si no, tomamos la última parte
-	if !strings.ContainsAny(numPart, "0123456789") {
-		numPart = parts[len(parts)-1]
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("vacío")
 	}
 
-	// Determinar formato:
-	// Si contiene coma y punto -> probablemente español (punto miles, coma decimal)
-	// Si contiene solo coma -> podría ser miles o decimal
-	// Si contiene solo punto -> decimal o miles
+	lastComma := strings.LastIndex(s, ",")
+	lastDot := strings.LastIndex(s, ".")
 
-	if strings.Contains(numPart, ",") && strings.Contains(numPart, ".") {
-		// Ej: "2.000,50" -> eliminar puntos, cambiar coma por punto
-		cleaned := strings.ReplaceAll(numPart, ".", "")
-		cleaned = strings.ReplaceAll(cleaned, ",", ".")
-		return strconv.ParseFloat(cleaned, 64)
-	} else if strings.Contains(numPart, ",") {
-		// Solo coma: puede ser "200,000" (miles) o "200,50" (decimal)
-		// Si hay más de 2 dígitos tras la coma y no hay punto, asumimos miles
-		lastCommaIdx := strings.LastIndex(numPart, ",")
-		afterComma := numPart[lastCommaIdx+1:]
-		if len(afterComma) <= 2 && !strings.Contains(numPart, ".") {
-			// Asumir coma decimal
-			cleaned := strings.Replace(numPart, ",", ".", 1)
-			return strconv.ParseFloat(cleaned, 64)
+	switch {
+	case lastComma >= 0 && lastDot >= 0:
+		if lastComma > lastDot {
+			// Formato español: 1.234,56
+			s = strings.ReplaceAll(s, ".", "")
+			s = strings.ReplaceAll(s, ",", ".")
 		} else {
-			// Asumir coma de miles, quitar todas las comas
-			cleaned := strings.ReplaceAll(numPart, ",", "")
-			return strconv.ParseFloat(cleaned, 64)
+			// Formato inglés / nuevo: 1,234.56
+			s = strings.ReplaceAll(s, ",", "")
 		}
-	} else {
-		// Sin comas: ej "200000" o "200000.50"
-		cleaned := strings.ReplaceAll(numPart, ",", "") // por si acaso
-		return strconv.ParseFloat(cleaned, 64)
+	case lastComma >= 0:
+		// Solo coma: si hay 3 dígitos detrás → separador de miles
+		if len(s)-lastComma-1 == 3 {
+			s = strings.ReplaceAll(s, ",", "")
+		} else {
+			s = strings.Replace(s, ",", ".", 1)
+		}
+	case lastDot >= 0:
+		// Solo punto: si hay 3 dígitos detrás → separador de miles (legado)
+		if len(s)-lastDot-1 == 3 && strings.Count(s, ".") > 0 {
+			s = strings.ReplaceAll(s, ".", "")
+		}
 	}
+
+	return strconv.ParseFloat(s, 64)
 }
 // SaveEntries guarda las entradas en un Excel intermedio
 func SaveEntries(entries []model.Entry, w io.Writer) error {
@@ -484,16 +477,27 @@ func SaveEntries(entries []model.Entry, w io.Writer) error {
 	return f.Write(w)
 }
 
-// formatCurrency devuelve una cadena como "200,000 USD"
 func formatCurrency(amount float64, currency string) string {
-	intAmount := int64(amount)
-	str := strconv.FormatInt(intAmount, 10)
-	if len(str) > 3 {
-		for i := len(str) - 3; i > 0; i -= 3 {
-			str = str[:i] + "," + str[i:]
+	str := strconv.FormatFloat(amount, 'f', 2, 64)
+	neg := false
+	if strings.HasPrefix(str, "-") {
+		neg = true
+		str = str[1:]
+	}
+	parts := strings.Split(str, ".")
+	intPart, decPart := parts[0], parts[1]
+
+	if len(intPart) > 3 {
+		for i := len(intPart) - 3; i > 0; i -= 3 {
+			intPart = intPart[:i] + "," + intPart[i:]
 		}
 	}
-	return str + " " + currency
+
+	res := intPart + "." + decPart + " " + currency
+	if neg {
+		res = "-" + res
+	}
+	return res
 }
 
 // filterAndGroupByCategory filtra las entradas por tipo y las agrupa en el orden dado.

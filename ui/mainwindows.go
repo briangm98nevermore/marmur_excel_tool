@@ -175,7 +175,8 @@ func (ui *mainUI) updateCategorySelect() {
 
 func (ui *mainUI) onAddOrUpdateEntry() {
     // Validar monto
-    amount, err := strconv.ParseFloat(ui.amountEntry.Text, 64)
+    amountText := strings.ReplaceAll(strings.TrimSpace(ui.amountEntry.Text), ",", "")
+	amount, err := strconv.ParseFloat(amountText, 64)
     if err != nil || amount <= 0 {
         d := dialog.NewError(fmt.Errorf("Monto inválido"), ui.win)
         d.SetDismissText("Aceptar")
@@ -418,18 +419,30 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// formatAmountDisplay formatea un monto como "200,000 USD" (coma para miles, sin decimales)
+// formatAmountDisplay formatea un monto como "24,250.25 USD"
+// (comas para miles, punto para decimales).
 func formatAmountDisplay(amount float64, currency string) string {
-	// Redondear a entero si no hay decimales significativos, pero normalmente trabajaremos con enteros
-	intAmount := int64(amount)
-	str := strconv.FormatInt(intAmount, 10)
-	// Insertar comas cada 3 dígitos
-	if len(str) > 3 {
-		for i := len(str) - 3; i > 0; i -= 3 {
-			str = str[:i] + "," + str[i:]
+	str := strconv.FormatFloat(amount, 'f', 2, 64) // ej. "24250.25"
+	neg := false
+	if strings.HasPrefix(str, "-") {
+		neg = true
+		str = str[1:]
+	}
+	parts := strings.Split(str, ".")
+	intPart, decPart := parts[0], parts[1]
+
+	// Insertar comas cada 3 dígitos en la parte entera
+	if len(intPart) > 3 {
+		for i := len(intPart) - 3; i > 0; i -= 3 {
+			intPart = intPart[:i] + "," + intPart[i:]
 		}
 	}
-	return str + " " + currency
+
+	res := intPart + "." + decPart + " " + currency
+	if neg {
+		res = "-" + res
+	}
+	return res
 }
 
 func sortIndexedByCategory(entries []indexedEntry, order []string) {
