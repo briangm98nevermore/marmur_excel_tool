@@ -12,6 +12,8 @@ import (
 
 	"image/color"
 
+	xwidget "fyne.io/x/fyne/widget"
+
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -28,6 +30,7 @@ var months = []string{
 }
 
 type mainUI struct {
+	app               fyne.App
 	win               fyne.Window
 	entries           []model.Entry
 	monthSelect       *widget.Select
@@ -38,7 +41,7 @@ type mainUI struct {
 	typeRadio         *widget.RadioGroup
 	categorySelect    *widget.Select
 	invoiceEntry      *widget.Entry
-	descEntry         *widget.Entry
+	descEntry 		  *xwidget.CompletionEntry
 	amountEntry       *widget.Entry
 	dayEntry          *widget.Entry
 	incomeCategories  []string
@@ -52,6 +55,7 @@ type mainUI struct {
 	displayIncomeIndices  []int
 	displayExpenseEntries []model.Entry
 	displayExpenseIndices []int
+	allDescriptions []string
 }
 
 type indexedEntry struct {
@@ -59,8 +63,9 @@ type indexedEntry struct {
     idx   int
 }
 
-func BuildUI(w fyne.Window) {
+func BuildUI(a fyne.App, w fyne.Window) {
 	ui := &mainUI{
+		app:              a,
 		win:              w,
 		incomeCategories: append([]string{}, model.DefaultIncomeCategories...),
 		expenseCategories: append([]string{}, model.DefaultExpenseCategories...),
@@ -74,13 +79,12 @@ func BuildUI(w fyne.Window) {
 	ui.monthSelect = widget.NewSelect(months, nil)
 	ui.monthSelect.SetSelected(currentMonth)
 
-	// Generar lista de años: desde hace 5 años hasta dentro de 5 años
 	currentYear := time.Now().Year()
 	var years []string
 	for y := currentYear - 5; y <= currentYear + 5; y++ {
 		years = append(years, strconv.Itoa(y))
 	}
-	
+
 	ui.yearSelect = widget.NewSelect(years, nil)
 	ui.yearSelect.SetSelected(strconv.Itoa(time.Now().Year()))
 
@@ -102,7 +106,6 @@ func BuildUI(w fyne.Window) {
 		btnClear,
 	)
 
-	// --- Tabla con botones reales para editar/eliminar y texto truncado ---
 	// --- Dos tablas separadas con pestañas ---
 	ui.incomeTable = createEntryTable(ui, "Entrada")
 	ui.expenseTable = createEntryTable(ui, "Gasto")
@@ -128,8 +131,40 @@ func BuildUI(w fyne.Window) {
 
 	ui.invoiceEntry = widget.NewEntry()
 	ui.invoiceEntry.SetPlaceHolder("# Factura")
-	ui.descEntry = widget.NewEntry()
+
+	// Cargar historial completo desde preferencias
+	ui.allDescriptions = a.Preferences().StringListWithFallback("descripciones", []string{})
+
+	ui.descEntry = xwidget.NewCompletionEntry([]string{}) // empieza vacío
 	ui.descEntry.SetPlaceHolder("Descripción")
+
+	// Filtrar sugerencias mientras se escribe
+	ui.descEntry.OnChanged = func(s string) {
+		query := strings.ToLower(strings.TrimSpace(s))
+		if len(query) < 1 {
+			ui.descEntry.HideCompletion()
+			return
+		}
+
+		var filtered []string
+		for _, d := range ui.allDescriptions {
+			if strings.Contains(strings.ToLower(d), query) {
+				filtered = append(filtered, d)
+				if len(filtered) >= 10 { // limitar a 10 sugerencias
+					break
+				}
+			}
+		}
+
+		if len(filtered) == 0 {
+			ui.descEntry.HideCompletion()
+			return
+		}
+
+		ui.descEntry.SetOptions(filtered)
+		ui.descEntry.ShowCompletion()
+	}
+
 	ui.amountEntry = widget.NewEntry()
 	ui.amountEntry.SetPlaceHolder("Monto (ej. 150.00)")
 	ui.dayEntry = widget.NewEntry()
@@ -155,7 +190,7 @@ func BuildUI(w fyne.Window) {
 		btnBox,
 	)
 
-		content := container.NewBorder(
+	content := container.NewBorder(
 		topBar,
 		formBox,
 		nil, nil,
@@ -174,30 +209,29 @@ func (ui *mainUI) updateCategorySelect() {
 }
 
 func (ui *mainUI) onAddOrUpdateEntry() {
-    // Validar monto
-    amountText := strings.ReplaceAll(strings.TrimSpace(ui.amountEntry.Text), ",", "")
+	// Validar monto
+	amountText := strings.ReplaceAll(strings.TrimSpace(ui.amountEntry.Text), ",", "")
 	amount, err := strconv.ParseFloat(amountText, 64)
-    if err != nil || amount <= 0 {
-        d := dialog.NewError(fmt.Errorf("Monto inválido"), ui.win)
-        d.SetDismissText("Aceptar")
-        d.Show()
-        return
-    }
-    // Validar día
-    day, err := strconv.Atoi(ui.dayEntry.Text)
-    if err != nil || day < 1 || day > 31 {
-        d := dialog.NewError(fmt.Errorf("Día inválido (1-31)"), ui.win)
-        d.SetDismissText("Aceptar")
-        d.Show()
-        return
-    }
+	if err != nil || amount <= 0 {
+		d := dialog.NewError(fmt.Errorf("Monto inválido"), ui.win)
+		d.SetDismissText("Aceptar")
+		d.Show()
+		return
+	}
+	// Validar día
+	day, err := strconv.Atoi(ui.dayEntry.Text)
+	if err != nil || day < 1 || day > 31 {
+		d := dialog.NewError(fmt.Errorf("Día inválido (1-31)"), ui.win)
+		d.SetDismissText("Aceptar")
+		d.Show()
+		return
+	}
 
-    // Validar factura (opcional, pero si se ingresa debe ser entero positivo)
+	// Validar factura (opcional, pero si se ingresa debe ser entero positivo)
 	invoiceText := strings.TrimSpace(ui.invoiceEntry.Text)
 	var invoiceNum string
 
 	if ui.editingIndex == -1 {
-		// Nueva entrada: factura opcional
 		if invoiceText == "" {
 			invoiceNum = ""
 		} else {
@@ -211,7 +245,6 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 			invoiceNum = strconv.Itoa(invNum)
 		}
 	} else {
-		// Edición: si vacío, conservar el anterior; si no, validar
 		if invoiceText == "" {
 			invoiceNum = ui.entries[ui.editingIndex].InvoiceNum
 		} else {
@@ -226,45 +259,60 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 		}
 	}
 
-    year, _ := strconv.Atoi(ui.yearSelect.Selected)
-    month := indexOfMonth(ui.monthSelect.Selected) + 1
-    date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+	year, _ := strconv.Atoi(ui.yearSelect.Selected)
+	month := indexOfMonth(ui.monthSelect.Selected) + 1
+	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
 
-    entry := model.Entry{
-        Date:        date,
-        Type:        ui.typeRadio.Selected,
-        Category:    ui.categorySelect.Selected,
-        InvoiceNum:  invoiceNum,
-        Description: ui.descEntry.Text,
-        Amount:      amount,
-        Currency:    ui.currencySelect.Selected,
-    }
+	entry := model.Entry{
+		Date:        date,
+		Type:        ui.typeRadio.Selected,
+		Category:    ui.categorySelect.Selected,
+		InvoiceNum:  invoiceNum,
+		Description: ui.descEntry.Text,
+		Amount:      amount,
+		Currency:    ui.currencySelect.Selected,
+	}
 
-    if ui.editingIndex >= 0 {
-        ui.entries[ui.editingIndex] = entry
-        ui.editingIndex = -1
-        ui.addButton.SetText("Añadir")
-        ui.cancelButton.Hide()
-    } else {
-        if entry.Type == "Entrada" {
-            if !contains(ui.incomeCategories, entry.Category) && entry.Category != "" {
-                ui.incomeCategories = append(ui.incomeCategories, entry.Category)
-            }
-        } else {
-            if !contains(ui.expenseCategories, entry.Category) && entry.Category != "" {
-                ui.expenseCategories = append(ui.expenseCategories, entry.Category)
-            }
-        }
-        ui.entries = append(ui.entries, entry)
-    }
+	if ui.editingIndex >= 0 {
+		ui.entries[ui.editingIndex] = entry
+		ui.editingIndex = -1
+		ui.addButton.SetText("Añadir")
+		ui.cancelButton.Hide()
+	} else {
+		if entry.Type == "Entrada" {
+			if !contains(ui.incomeCategories, entry.Category) && entry.Category != "" {
+				ui.incomeCategories = append(ui.incomeCategories, entry.Category)
+			}
+		} else {
+			if !contains(ui.expenseCategories, entry.Category) && entry.Category != "" {
+				ui.expenseCategories = append(ui.expenseCategories, entry.Category)
+			}
+		}
+		ui.entries = append(ui.entries, entry)
+	}
 
-        // Limpiar formulario
-    ui.invoiceEntry.SetText("")
-    ui.descEntry.SetText("")
-    ui.amountEntry.SetText("")
-    ui.dayEntry.SetText("1")
-    ui.rebuildDisplay()
-    ui.incomeTable.Refresh()
+	// Guardar descripción en el historial completo de autocompletado
+	if entry.Description != "" {
+		exists := false
+		for _, d := range ui.allDescriptions {
+			if d == entry.Description {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			ui.allDescriptions = append(ui.allDescriptions, entry.Description)
+			ui.app.Preferences().SetStringList("descripciones", ui.allDescriptions)
+		}
+	}
+
+	// Limpiar formulario
+	ui.invoiceEntry.SetText("")
+	ui.descEntry.SetText("")
+	ui.amountEntry.SetText("")
+	ui.dayEntry.SetText("1")
+	ui.rebuildDisplay()
+	ui.incomeTable.Refresh()
 	ui.expenseTable.Refresh()
 }
 
@@ -359,6 +407,25 @@ func (ui *mainUI) onOpenExcel() {
 			return
 		}
 		ui.entries = entries
+
+		// Añadir descripciones importadas al historial completo
+		for _, e := range entries {
+			if e.Description == "" {
+				continue
+			}
+			exists := false
+			for _, d := range ui.allDescriptions {
+				if d == e.Description {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				ui.allDescriptions = append(ui.allDescriptions, e.Description)
+			}
+		}
+		ui.app.Preferences().SetStringList("descripciones", ui.allDescriptions)
+
 		ui.rebuildDisplay()
 		ui.incomeTable.Refresh()
 		ui.expenseTable.Refresh()

@@ -14,7 +14,7 @@ func main() {
 	// Aplicar tema con factor de escala (1.3 = un 30% más grandes)
 	a.Settings().SetTheme(&scaledTheme{factor: 1.3})
 
-	ui.BuildUI(w)
+	ui.BuildUI(a, w)
 
 	w.Resize(fyne.NewSize(1200, 700))
 	w.ShowAndRun()
