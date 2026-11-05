@@ -527,29 +527,55 @@ func formatAmountDisplay(amount float64, currency string) string {
 	return res
 }
 
-func sortIndexedByCategory(entries []indexedEntry, order []string) {
-    rank := make(map[string]int)
-    for i, cat := range order {
-        rank[cat] = i
-    }
-    sort.Slice(entries, func(i, j int) bool {
-        ci, cj := entries[i].entry.Category, entries[j].entry.Category
-        ri, oki := rank[ci]
-        rj, okj := rank[cj]
-        if oki && okj {
-            if ri != rj {
-                return ri < rj
-            }
-        } else if oki {
-            return true
-        } else if okj {
-            return false
-        }
-        if ci != cj {
-            return ci < cj
-        }
-        return entries[i].entry.Date.Before(entries[j].entry.Date)
-    })
+func sortIndexedByCategory(entries []indexedEntry, order []string, byInvoice bool) {
+	rank := make(map[string]int)
+	for i, cat := range order {
+		rank[cat] = i
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		ci, cj := entries[i].entry.Category, entries[j].entry.Category
+		ri, oki := rank[ci]
+		rj, okj := rank[cj]
+		if oki && okj {
+			if ri != rj {
+				return ri < rj
+			}
+		} else if oki {
+			return true
+		} else if okj {
+			return false
+		}
+		if ci != cj {
+			return ci < cj
+		}
+		// Misma categoría
+		if byInvoice {
+			return lessByInvoice(entries[i].entry, entries[j].entry)
+		}
+		return entries[i].entry.Date.Before(entries[j].entry.Date)
+	})
+}
+
+// lessByInvoice compara dos entradas por número de factura (numérico).
+// Las entradas sin factura válida van al final; si empatan, por fecha.
+func lessByInvoice(a, b model.Entry) bool {
+	ai, aerr := strconv.Atoi(strings.TrimSpace(a.InvoiceNum))
+	bi, berr := strconv.Atoi(strings.TrimSpace(b.InvoiceNum))
+
+	if aerr == nil && berr == nil {
+		if ai != bi {
+			return ai < bi
+		}
+		return a.Date.Before(b.Date)
+	}
+	if aerr == nil && berr != nil {
+		return true // a tiene factura, b no → a primero
+	}
+	if aerr != nil && berr == nil {
+		return false
+	}
+	// Ninguno tiene factura válida → por fecha
+	return a.Date.Before(b.Date)
 }
 
 func (ui *mainUI) rebuildDisplay() {
@@ -568,8 +594,8 @@ func (ui *mainUI) rebuildDisplay() {
         }
     }
 
-    sortIndexedByCategory(income, ui.incomeCategories)
-    sortIndexedByCategory(expense, ui.expenseCategories)
+    sortIndexedByCategory(income, ui.incomeCategories, true)  // entradas → por factura
+	sortIndexedByCategory(expense, ui.expenseCategories, false) // gastos → por fecha
 
     // Llenar slices combinados (por si aún se usan)
     ui.displayEntries = ui.displayEntries[:0]

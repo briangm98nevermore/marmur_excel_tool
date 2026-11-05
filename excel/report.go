@@ -503,41 +503,70 @@ func formatCurrency(amount float64, currency string) string {
 // filterAndGroupByCategory filtra las entradas por tipo y las agrupa en el orden dado.
 // Devuelve una lista de pares (categoría, lista de entradas).
 func filterAndGroupByCategory(entries []model.Entry, tipo string, order []string) [][]model.Entry {
-    // Agrupar
-    groups := make(map[string][]model.Entry)
-    for _, e := range entries {
-        if e.Type == tipo {
-            groups[e.Category] = append(groups[e.Category], e)
-        }
-    }
-    // Ordenar según order, y luego por fecha dentro de cada grupo
-    result := make([][]model.Entry, 0, len(order))
-    for _, cat := range order {
-        if list, ok := groups[cat]; ok {
-            // Ordenar por fecha ascendente
-            sort.Slice(list, func(i, j int) bool {
-                return list[i].Date.Before(list[j].Date)
-            })
-            result = append(result, list)
-        }
-    }
-    // Añadir categorías nuevas que no estén en order (al final)
-    for cat, list := range groups {
-        found := false
-        for _, oc := range order {
-            if oc == cat {
-                found = true
-                break
-            }
-        }
-        if !found {
-            sort.Slice(list, func(i, j int) bool {
-                return list[i].Date.Before(list[j].Date)
-            })
-            result = append(result, list)
-        }
-    }
-    return result
+	// Agrupar
+	groups := make(map[string][]model.Entry)
+	for _, e := range entries {
+		if e.Type == tipo {
+			groups[e.Category] = append(groups[e.Category], e)
+		}
+	}
+
+	byInvoice := tipo == "Entrada"
+
+	// Ordenar según order, y dentro de cada grupo según corresponda
+	result := make([][]model.Entry, 0, len(order))
+	for _, cat := range order {
+		if list, ok := groups[cat]; ok {
+			sort.Slice(list, func(i, j int) bool {
+				if byInvoice {
+					return lessEntryByInvoice(list[i], list[j])
+				}
+				return list[i].Date.Before(list[j].Date)
+			})
+			result = append(result, list)
+		}
+	}
+	// Añadir categorías nuevas que no estén en order (al final)
+	for cat, list := range groups {
+		found := false
+		for _, oc := range order {
+			if oc == cat {
+				found = true
+				break
+			}
+		}
+		if !found {
+			sort.Slice(list, func(i, j int) bool {
+				if byInvoice {
+					return lessEntryByInvoice(list[i], list[j])
+				}
+				return list[i].Date.Before(list[j].Date)
+			})
+			result = append(result, list)
+		}
+	}
+	return result
+}
+
+// lessEntryByInvoice compara dos entradas por número de factura (numérico).
+// Las que no tienen factura válida van al final; si empatan, por fecha.
+func lessEntryByInvoice(a, b model.Entry) bool {
+	ai, aerr := strconv.Atoi(strings.TrimSpace(a.InvoiceNum))
+	bi, berr := strconv.Atoi(strings.TrimSpace(b.InvoiceNum))
+
+	if aerr == nil && berr == nil {
+		if ai != bi {
+			return ai < bi
+		}
+		return a.Date.Before(b.Date)
+	}
+	if aerr == nil && berr != nil {
+		return true
+	}
+	if aerr != nil && berr == nil {
+		return false
+	}
+	return a.Date.Before(b.Date)
 }
 
 // createDetailedSheet crea una hoja con todas las transacciones de un tipo,
