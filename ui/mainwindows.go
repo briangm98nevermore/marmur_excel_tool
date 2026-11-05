@@ -130,13 +130,11 @@ func BuildUI(a fyne.App, w fyne.Window) {
 	ui.typeRadio.SetSelected("Entrada")
 
 	ui.invoiceEntry = widget.NewEntry()
-	ui.invoiceEntry.SetPlaceHolder("# Factura")
 
 	// Cargar historial completo desde preferencias
 	ui.allDescriptions = a.Preferences().StringListWithFallback("descripciones", []string{})
 
 	ui.descEntry = xwidget.NewCompletionEntry([]string{}) // empieza vacío
-	ui.descEntry.SetPlaceHolder("Descripción")
 
 	// Filtrar sugerencias mientras se escribe
 	ui.descEntry.OnChanged = func(s string) {
@@ -166,9 +164,7 @@ func BuildUI(a fyne.App, w fyne.Window) {
 	}
 
 	ui.amountEntry = widget.NewEntry()
-	ui.amountEntry.SetPlaceHolder("Monto (ej. 150.00)")
 	ui.dayEntry = widget.NewEntry()
-	ui.dayEntry.SetPlaceHolder("Día (1-31)")
 
 	form := widget.NewForm(
 		widget.NewFormItem("Tipo", ui.typeRadio),
@@ -185,7 +181,7 @@ func BuildUI(a fyne.App, w fyne.Window) {
 	btnBox := container.NewHBox(ui.addButton, ui.cancelButton)
 
 	formBox := container.NewVBox(
-		widget.NewLabel("Nueva entrada:"),
+		widget.NewLabel("Añadir Entradas / Gastos :"),
 		form,
 		btnBox,
 	)

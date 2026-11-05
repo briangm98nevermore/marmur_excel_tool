@@ -4,12 +4,12 @@ go 1.26.5
 
 require (
 	fyne.io/fyne/v2 v2.8.0
+	fyne.io/x/fyne v0.0.0-20261007154834-b636b6d322fc
 	github.com/xuri/excelize/v2 v2.11.0
 )
 
 require (
 	fyne.io/systray v1.12.2 // indirect
-	fyne.io/x/fyne v0.0.0-20261007154834-b636b6d322fc // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/FyshOS/fancyfs v0.0.1 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
