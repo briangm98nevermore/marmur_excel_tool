@@ -208,7 +208,7 @@ func (ui *mainUI) onAddOrUpdateEntry() {
 	// Validar monto
 	amountText := strings.ReplaceAll(strings.TrimSpace(ui.amountEntry.Text), ",", "")
 	amount, err := strconv.ParseFloat(amountText, 64)
-	if err != nil || amount <= 0 {
+	if err != nil || amount < 0 {
 		d := dialog.NewError(fmt.Errorf("Monto inválido"), ui.win)
 		d.SetDismissText("Aceptar")
 		d.Show()
