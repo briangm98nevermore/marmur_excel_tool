@@ -22,7 +22,7 @@ func main() {
 
 /*
 	** compilar para windows
-	fyne-cross windows -app-id com.example.marmur_excel_tool -env GOTOOLCHAIN=auto
+	fyne-cross windows -app-id com.balance_sheet_tool -env GOTOOLCHAIN=auto
 
 	** compilar para linux local
 	go build -tags "system_glfw" -o balance_sheet_tool
